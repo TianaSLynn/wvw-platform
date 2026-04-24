@@ -107,5 +107,3 @@ export async function POST(req: Request) {
   } catch (e) { return serverError(e); }
 }
 
-// Export the helper so other routes can auto-post announcements
-export { getAnnouncementSpace };

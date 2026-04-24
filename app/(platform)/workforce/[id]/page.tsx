@@ -16,11 +16,12 @@ const STATUS_COLORS: Record<string, string> = {
   TERMINATED:  "text-red-600 bg-red-500/10",
 };
 
-export default async function EmployeePage({ params }: { params: { id: string } }) {
+export default async function EmployeePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
+  const { id } = await params;
 
   const employee = await db.employee.findFirst({
-    where: { id: params.id, orgId: user.orgId },
+    where: { id, orgId: user.orgId },
     include: {
       client:       { select: { id: true, name: true } },
       manager:      { select: { id: true, firstName: true, lastName: true, title: true } },
