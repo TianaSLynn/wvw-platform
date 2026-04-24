@@ -1,0 +1,344 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Animation Easing Curves (Emil Kowalski design system) ─────────────── */
+:root {
+  --ease-out:     cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out:  cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer:  cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ─── CSS Custom Properties (shadcn/ui semantic tokens) ──────────────────── */
+@layer base {
+  :root {
+    --background:        0 0% 98%;
+    --foreground:        222 47% 11%;
+    --card:              0 0% 100%;
+    --card-foreground:   222 47% 11%;
+    --popover:           0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary:           222 71% 16%;
+    --primary-foreground: 0 0% 100%;
+    --secondary:         220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted:             220 14% 96%;
+    --muted-foreground:  215 16% 47%;
+    --accent:            43 57% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive:       0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border:            220 13% 91%;
+    --input:             220 13% 91%;
+    --ring:              222 71% 16%;
+    --radius:            0.5rem;
+  }
+
+  .dark {
+    --background:        222 47% 6%;
+    --foreground:        213 31% 91%;
+    --card:              222 47% 9%;
+    --card-foreground:   213 31% 91%;
+    --popover:           222 47% 9%;
+    --popover-foreground: 213 31% 91%;
+    --primary:           43 57% 55%;
+    --primary-foreground: 222 47% 6%;
+    --secondary:         222 47% 12%;
+    --secondary-foreground: 213 31% 91%;
+    --muted:             222 47% 12%;
+    --muted-foreground:  215 16% 57%;
+    --accent:            43 57% 55%;
+    --accent-foreground: 222 47% 6%;
+    --destructive:       0 63% 31%;
+    --destructive-foreground: 213 31% 91%;
+    --border:            222 47% 14%;
+    --input:             222 47% 14%;
+    --ring:              43 57% 55%;
+  }
+}
+
+/* ─── Base Resets ─────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* ─── Button press feedback ───────────────────────────────────────────────── */
+@layer base {
+  button, [role="button"], a {
+    transition-property: transform, opacity, background-color, border-color, color, box-shadow;
+    transition-duration: 160ms;
+    transition-timing-function: var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    button:active:not(:disabled),
+    [role="button"]:active,
+    a:active {
+      transform: scale(0.97);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button:active, [role="button"]:active, a:active {
+      transform: none;
+    }
+    .animate-fade-in, .animate-fade-up, .animate-fade-in-scale,
+    .animate-slide-in-right, .animate-slide-in-left {
+      animation: none !important;
+    }
+  }
+}
+
+/* ─── Stagger utilities ───────────────────────────────────────────────────── */
+@layer utilities {
+  .stagger-children > * {
+    animation: fade-up 0.28s var(--ease-out) both;
+  }
+  .stagger-children > *:nth-child(1)  { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2)  { animation-delay: 40ms; }
+  .stagger-children > *:nth-child(3)  { animation-delay: 80ms; }
+  .stagger-children > *:nth-child(4)  { animation-delay: 120ms; }
+  .stagger-children > *:nth-child(5)  { animation-delay: 160ms; }
+  .stagger-children > *:nth-child(6)  { animation-delay: 200ms; }
+  .stagger-children > *:nth-child(7)  { animation-delay: 240ms; }
+  .stagger-children > *:nth-child(8)  { animation-delay: 280ms; }
+  .stagger-children > *:nth-child(n+9) { animation-delay: 300ms; }
+}
+
+/* ─── Core Components ────────────────────────────────────────────────────── */
+@layer components {
+
+  /* ── Sidebar Links ────────────────────────────────────────────────────── */
+  .sidebar-link {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer select-none relative;
+    transition: background-color 150ms var(--ease-out), color 150ms var(--ease-out);
+  }
+
+  .sidebar-link-active {
+    @apply bg-gold/15 text-gold;
+  }
+
+  .sidebar-link-active::before {
+    content: "";
+    @apply absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-gold rounded-r-full;
+  }
+
+  .sidebar-link-inactive {
+    @apply text-white/50 hover:text-white/90 hover:bg-white/[0.06];
+  }
+
+  /* ── Stat Card ────────────────────────────────────────────────────────── */
+  .stat-card {
+    @apply bg-card rounded-xl border border-border p-5 shadow-card;
+    transition: box-shadow 200ms var(--ease-out), border-color 200ms var(--ease-out), transform 200ms var(--ease-out);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .stat-card:hover {
+      @apply shadow-card-hover border-border/60 -translate-y-0.5;
+    }
+  }
+
+  /* ── Page Headers ─────────────────────────────────────────────────────── */
+  .page-header {
+    @apply mb-6 flex flex-col gap-1;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-foreground tracking-tight;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-muted-foreground;
+  }
+
+  /* ── Badges ───────────────────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border;
+  }
+
+  /* ── Risk dot ─────────────────────────────────────────────────────────── */
+  .risk-dot {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+  }
+
+  /* ── Skeleton shimmer ─────────────────────────────────────────────────── */
+  .skeleton {
+    @apply relative overflow-hidden bg-muted rounded;
+  }
+
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer;
+  }
+
+  /* ── Glass card ───────────────────────────────────────────────────────── */
+  .card-glass {
+    @apply bg-card/80 backdrop-blur-sm rounded-xl border border-border/60 shadow-card;
+  }
+
+  /* ── Data tables ──────────────────────────────────────────────────────── */
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .data-table th {
+    @apply text-left px-5 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-widest bg-muted/40;
+  }
+
+  .data-table td {
+    @apply px-5 py-3.5 text-sm;
+  }
+
+  .data-table tbody tr {
+    @apply border-t border-border/60 transition-colors;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-muted/20;
+  }
+
+  /* ── Section card ─────────────────────────────────────────────────────── */
+  .section-card {
+    @apply bg-card rounded-xl border border-border shadow-card overflow-hidden;
+  }
+
+  .section-card-header {
+    @apply flex items-center justify-between px-5 py-4 border-b border-border;
+  }
+
+  /* ── Status pills ─────────────────────────────────────────────────────── */
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border;
+  }
+
+  /* ── Input ────────────────────────────────────────────────────────────── */
+  .input-base {
+    @apply w-full px-3.5 py-2.5 bg-background border border-border rounded-lg text-sm;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent;
+    @apply placeholder:text-muted-foreground transition-colors;
+  }
+
+  /* ── Button variants ──────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold;
+    @apply bg-navy-900 text-white hover:bg-navy-800 border border-navy-700;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+    @apply disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-gold {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold;
+    @apply bg-gold text-navy-900 hover:bg-gold-400 border border-gold-600/30;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold;
+    @apply disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium;
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent hover:border-border;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+
+  /* ── Empty state ──────────────────────────────────────────────────────── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 px-6 text-center;
+  }
+
+  .empty-state-icon {
+    @apply w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4;
+  }
+
+  /* ── Gradient text ────────────────────────────────────────────────────── */
+  .gradient-text-gold {
+    background: linear-gradient(135deg, #C9A84C 0%, #f2d99d 50%, #C9A84C 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Glow rings ───────────────────────────────────────────────────────── */
+  .glow-gold {
+    box-shadow: 0 0 20px rgba(201, 168, 76, 0.15), 0 0 40px rgba(201, 168, 76, 0.05);
+  }
+
+  /* ── Animated underline ───────────────────────────────────────────────── */
+  .animated-underline {
+    @apply relative;
+  }
+
+  .animated-underline::after {
+    content: "";
+    @apply absolute bottom-0 left-0 w-0 h-[1px] bg-gold transition-all duration-300;
+  }
+
+  .animated-underline:hover::after {
+    @apply w-full;
+  }
+
+  /* ── Notification dot ─────────────────────────────────────────────────── */
+  .notif-dot {
+    @apply absolute top-1 right-1 w-2 h-2 rounded-full bg-gold border-2 border-background;
+  }
+}
+
+/* ─── Focus visible (accessibility) ──────────────────────────────────────── */
+@layer utilities {
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+
+  /* Clip-path reveal (Emil pattern) */
+  .clip-reveal {
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path 0.35s var(--ease-out);
+  }
+
+  .clip-reveal-active {
+    clip-path: inset(0 0% 0 0);
+  }
+
+  /* Smooth number counter animation */
+  .tabular-lining {
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+}

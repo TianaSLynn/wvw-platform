@@ -1,0 +1,2334 @@
+// ─────────────────────────────────────────────────────────────────────────────
+//  WVW Platform — Prisma Schema v1
+//  Normalized, multi-tenant, audit-proof data model
+// ─────────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  PARTNER
+  MANAGER
+  CONSULTANT
+  AUDITOR
+  CLIENT_ADMIN
+  CLIENT_USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum ProjectStatus {
+  DISCOVERY
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectType {
+  AUDIT
+  CONSULTING
+  ADVISORY
+  TRAINING
+  RETAINER
+  ASSESSMENT
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum AuditStatus {
+  DRAFT
+  PLANNING
+  FIELDWORK
+  REVIEW
+  REPORTING
+  COMPLETED
+  ARCHIVED
+}
+
+enum AuditType {
+  INTERNAL
+  EXTERNAL
+  COMPLIANCE
+  OPERATIONAL
+  FINANCIAL
+  IT
+  HR
+  RISK
+  CUSTOM
+}
+
+enum FindingSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFORMATIONAL
+}
+
+enum FindingStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING_EVIDENCE
+  REMEDIATED
+  ACCEPTED_RISK
+  CLOSED
+  REOPENED
+}
+
+enum EvidenceType {
+  FILE
+  NOTE
+  SCREENSHOT
+  API_SNAPSHOT
+  INTERVIEW
+  OBSERVATION
+  SYSTEM_EXPORT
+  LINK
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CHECK
+  CREDIT_CARD
+  ACH
+  WIRE
+  OTHER
+}
+
+enum TimeEntryStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REIMBURSED
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  ACTION_REQUIRED
+}
+
+enum ComplianceFrameworkType {
+  SOC2
+  ISO27001
+  HIPAA
+  GDPR
+  NIST
+  PCI_DSS
+  CCPA
+  FTC
+  CUSTOM
+}
+
+enum IntegrationStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  PENDING_AUTH
+}
+
+enum RecurrenceType {
+  NONE
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+}
+
+enum RiskBand {
+  CRITICAL             // score 0–39
+  AT_RISK              // score 40–59
+  NEEDS_STRENGTHENING  // score 60–79
+  STRONG               // score 80–100
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ORGANIZATION (Multi-Tenant Root)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(cuid())
+  clerkOrgId  String?  @unique // Clerk organization ID
+  name        String
+  slug        String   @unique
+  logoUrl     String?
+  website     String?
+  industry    String?
+  timezone    String   @default("America/New_York")
+  currency    String   @default("USD")
+  fiscalYearStart Int  @default(1) // Month number: 1 = January
+  settings    Json     @default("{}") // feature flags, branding, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users       User[]
+  clients     Client[]
+  projects    Project[]
+  audits      Audit[]
+  auditTemplates AuditTemplate[]
+  invoices    Invoice[]
+  documents   Document[]
+  integrations Integration[]
+  complianceFrameworks ComplianceFramework[]
+  activityLogs ActivityLog[]
+  pathways    Pathway[]
+  employees   Employee[]
+  opportunities Opportunity[]
+  communitySpaces CommunitySpace[]
+  reportSnapshots ReportSnapshot[]
+  jobPostings   JobPosting[]
+  jobApplications JobApplication[]
+  meetings      Meeting[]
+  serviceOfferings ServiceOffering[]
+  grants        Grant[]
+  onboardingWorkflows OnboardingWorkflow[]
+  courses       Course[]
+  messageThreads MessageThread[]
+  cohorts       Cohort[]
+  externalSignals ExternalSignal[]
+  recognitions  Recognition[]
+
+  @@index([slug])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  USER
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  clerkUserId  String     @unique // Clerk user ID
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  email        String
+  firstName    String
+  lastName     String
+  avatarUrl    String?
+  phone        String?
+  title        String?    // Job title e.g. "Senior Auditor"
+  department   String?
+  bio          String?
+  timezone     String     @default("America/New_York")
+  role         UserRole   @default(CONSULTANT)
+  status       UserStatus @default(ACTIVE)
+
+  // Capacity & rates
+  targetUtilization Float  @default(0.8)  // 80%
+  billableRate    Float?                   // hourly rate in org currency
+  costRate        Float?                   // internal cost rate
+
+  // Preferences (JSON blob for extensibility)
+  preferences     Json   @default("{}")
+  notificationPrefs Json @default("{}")
+
+  lastActiveAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime? // soft delete
+
+  // Relations
+  assignedProjects    ProjectMember[]
+  assignedTasks       Task[]          @relation("TaskAssignee")
+  createdTasks        Task[]          @relation("TaskCreator")
+  timeEntries         TimeEntry[]
+  expenses            Expense[]
+  auditAssignments    AuditMember[]
+  auditFindings       AuditFinding[]  @relation("FindingAssignee")
+  uploadedEvidence    Evidence[]
+  remediationActions  RemediationAction[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+  skills              UserSkill[]
+  availability        Availability[]
+  approvedTimeEntries TimeEntry[]     @relation("TimeEntryApprover")
+  createdInvoices     Invoice[]
+  documents           Document[]      @relation("DocumentCreator")
+  ownedOpportunities  Opportunity[]   @relation("OwnedOpportunities")
+  crmActivities       CrmActivity[]   @relation("CrmActivities")
+  communityPosts      CommunityPost[] @relation("CommunityPosts")
+  communityComments   CommunityComment[] @relation("CommunityComments")
+  communityReactions  CommunityReaction[] @relation("CommunityReactions")
+  generatedReports    ReportSnapshot[] @relation("GeneratedReports")
+  postedJobs          JobPosting[]     @relation("PostedJobs")
+  reviewedApplications JobApplication[] @relation("ReviewedApplications")
+  createdMeetings     Meeting[]        @relation("CreatedMeetings")
+  sentMessages        Message[]        @relation("SentMessages")
+  createdThreads      MessageThread[]  @relation("CreatedThreads")
+  assignedGrants      Grant[]          @relation("AssignedGrants")
+  assignedOnboardingSteps OnboardingStep[] @relation("AssignedOnboardingSteps")
+  createdCourses      Course[]         @relation("CreatedCourses")
+  assignedCourses     CourseAssignment[] @relation("AssignedCourses")
+  recognitionsGiven   Recognition[]    @relation("RecognitionsGiven")
+
+  @@unique([orgId, email])
+  @@index([orgId, role])
+  @@index([clerkUserId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CLIENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Client {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name         String
+  legalName    String?
+  industry     String?
+  size         String?  // "1-50", "51-200", etc.
+  website      String?
+  logoUrl      String?
+  description  String?
+
+  // Billing info
+  billingAddress  Json?   // { street, city, state, zip, country }
+  billingEmail    String?
+  taxId           String?
+  paymentTerms    Int     @default(30) // days
+  defaultRate     Float?
+
+  // Health score (computed or manually set)
+  healthScore     Float?  // 0-100
+  npsScore        Int?    // -100 to 100
+
+  // Status
+  isActive        Boolean  @default(true)
+  onboardedAt     DateTime?
+  churnedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  contacts        Contact[]
+  projects        Project[]
+  audits          Audit[]
+  invoices        Invoice[]
+  documents       Document[]
+  activityLogs    ActivityLog[]
+  employees       Employee[]
+  opportunities   Opportunity[]
+  crmActivities   CrmActivity[]
+  meetings        Meeting[]
+  messageThreads  MessageThread[]
+  packageLicenses PackageLicense[]
+
+  @@index([orgId, isActive])
+  @@index([orgId, name])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CONTACT (Client-side people)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Contact {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  title       String?
+  department  String?
+  isPrimary   Boolean  @default(false)
+  isDecisionMaker Boolean @default(false)
+  notes       String?
+  avatarUrl   String?
+
+  // Portal access
+  clerkUserId String?  @unique // if they have portal access
+  portalRole  UserRole @default(CLIENT_USER)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([clientId])
+  @@index([email])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PROJECT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  orgId       String
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId    String
+  client      Client        @relation(fields: [clientId], references: [id])
+
+  name        String
+  code        String?       // e.g. "WVW-2024-001"
+  description String?
+  type        ProjectType   @default(CONSULTING)
+  status      ProjectStatus @default(DISCOVERY)
+  priority    Priority      @default(MEDIUM)
+
+  // Dates
+  startDate   DateTime?
+  targetEndDate DateTime?
+  actualEndDate DateTime?
+
+  // Budget & financials
+  budget      Float?        // total contract value
+  hoursBudget Float?        // budgeted hours
+  billingModel String?      // "fixed", "time_and_materials", "retainer"
+  retainerAmount Float?     // monthly retainer if applicable
+
+  // Progress
+  completionPct Float       @default(0)
+
+  // Metadata
+  tags        String[]
+  customFields Json        @default("{}")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  // Relations
+  members     ProjectMember[]
+  tasks       Task[]
+  milestones  Milestone[]
+  timeEntries TimeEntry[]
+  expenses    Expense[]
+  invoices    Invoice[]
+  audits      Audit[]
+  documents   Document[]
+  activityLogs ActivityLog[]
+
+  @@index([orgId, status])
+  @@index([clientId])
+  @@index([orgId, clientId])
+}
+
+model ProjectMember {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role      String  @default("member")  // "lead", "member", "reviewer"
+  billableRate Float?  // override user's default rate
+  allocatedHours Float?
+  joinedAt  DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TASK & MILESTONE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Task {
+  id          String     @id @default(cuid())
+  projectId   String
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parentId    String?    // for sub-tasks
+  parent      Task?      @relation("TaskParent", fields: [parentId], references: [id])
+  subtasks    Task[]     @relation("TaskParent")
+
+  creatorId   String
+  creator     User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  assigneeId  String?
+  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  milestoneId String?
+  milestone   Milestone? @relation(fields: [milestoneId], references: [id])
+
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority   @default(MEDIUM)
+
+  dueDate     DateTime?
+  startDate   DateTime?
+  completedAt DateTime?
+
+  estimatedHours Float?
+  actualHours    Float?
+
+  tags        String[]
+  position    Int        @default(0) // kanban order
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  timeEntries TimeEntry[]
+  comments    TaskComment[]
+
+  @@index([projectId, status])
+  @@index([assigneeId])
+  @@index([milestoneId])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  dueDate     DateTime?
+  completedAt DateTime?
+  isCompleted Boolean  @default(false)
+  deliverables String[]
+
+  tasks       Task[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TIME ENTRY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TimeEntry {
+  id          String          @id @default(cuid())
+  orgId       String
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  projectId   String?
+  project     Project?        @relation(fields: [projectId], references: [id])
+  taskId      String?
+  task        Task?           @relation(fields: [taskId], references: [id])
+
+  description String
+  date        DateTime        @db.Date
+  hours       Float
+  isBillable  Boolean         @default(true)
+  billableRate Float?         // rate at time of entry
+  amount      Float?          // computed: hours * billableRate
+
+  status      TimeEntryStatus @default(DRAFT)
+  approverId  String?
+  approver    User?           @relation("TimeEntryApprover", fields: [approverId], references: [id])
+  approvedAt  DateTime?
+  rejectionNote String?
+
+  invoiceId   String?
+  invoice     Invoice?        @relation(fields: [invoiceId], references: [id])
+  invoicedAt  DateTime?
+
+  tags        String[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([userId, date])
+  @@index([projectId, date])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EXPENSE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Expense {
+  id          String        @id @default(cuid())
+  orgId       String
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  projectId   String?
+  project     Project?      @relation(fields: [projectId], references: [id])
+
+  description String
+  category    String        // "travel", "meals", "software", "equipment", etc.
+  amount      Float
+  currency    String        @default("USD")
+  date        DateTime      @db.Date
+  isBillable  Boolean       @default(false)
+  receiptUrl  String?       // S3/Blob URL
+
+  status      ExpenseStatus @default(DRAFT)
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  reimbursedAt DateTime?
+  notes       String?
+
+  invoiceId   String?
+  invoice     Invoice?      @relation(fields: [invoiceId], references: [id])
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, date])
+  @@index([projectId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INVOICE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Invoice {
+  id            String        @id @default(cuid())
+  orgId         String
+  org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        Client        @relation(fields: [clientId], references: [id])
+  projectId     String?
+  project       Project?      @relation(fields: [projectId], references: [id])
+  createdById   String
+  createdBy     User          @relation(fields: [createdById], references: [id])
+
+  invoiceNumber String        @unique
+  status        InvoiceStatus @default(DRAFT)
+
+  issueDate     DateTime      @db.Date
+  dueDate       DateTime      @db.Date
+  paidDate      DateTime?
+
+  subtotal      Float
+  taxRate       Float         @default(0)
+  taxAmount     Float         @default(0)
+  discountAmount Float        @default(0)
+  total         Float
+
+  currency      String        @default("USD")
+  notes         String?
+  internalNotes String?
+  terms         String?
+
+  // Recurring
+  recurrence    RecurrenceType @default(NONE)
+  nextInvoiceDate DateTime?
+
+  // Payment
+  paymentMethod PaymentMethod?
+  paymentRef    String?
+
+  // PDF
+  pdfUrl        String?
+
+  lineItems     InvoiceLineItem[]
+  timeEntries   TimeEntry[]
+  expenses      Expense[]
+  payments      Payment[]
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([orgId, status])
+  @@index([clientId])
+  @@index([dueDate])
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  description String
+  quantity    Float    @default(1)
+  unitPrice   Float
+  amount      Float
+  taxable     Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice       @relation(fields: [invoiceId], references: [id])
+
+  amount      Float
+  date        DateTime      @db.Date
+  method      PaymentMethod @default(BANK_TRANSFER)
+  reference   String?
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  @@index([invoiceId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUDIT (the core of WVW)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Audit {
+  id            String      @id @default(cuid())
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        Client      @relation(fields: [clientId], references: [id])
+  projectId     String?
+  project       Project?    @relation(fields: [projectId], references: [id])
+  templateId    String?
+  template      AuditTemplate? @relation(fields: [templateId], references: [id])
+
+  name          String
+  code          String?     // e.g. "AUD-2024-001"
+  description   String?
+  type          AuditType   @default(COMPLIANCE)
+  status        AuditStatus @default(DRAFT)
+  scope         String?     // Audit scope statement
+  objectives    String[]
+  methodology   String?
+
+  // Compliance frameworks this audit covers
+  frameworks    AuditFrameworkMapping[]
+
+  // Risk
+  overallRiskScore Float?   // computed: 0-100
+  inherentRisk  String?     // "low", "medium", "high", "critical"
+  residualRisk  String?
+
+  // Dates
+  planningStartDate DateTime?
+  fieldworkStartDate DateTime?
+  fieldworkEndDate  DateTime?
+  reportDueDate     DateTime?
+  completedAt       DateTime?
+
+  // Token for public evidence submission
+  publicToken   String?     @unique @default(cuid())
+  isPublicTokenActive Boolean @default(false)
+
+  // Metadata
+  tags          String[]
+  customFields  Json        @default("{}")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  members         AuditMember[]
+  sections        AuditSection[]
+  findings        AuditFinding[]
+  evidence        Evidence[]
+  activityLogs    ActivityLog[]
+  surveyResponses SurveyResponse[]
+  auditResult     AuditResult?
+  recommendations GeneratedRecommendation[]
+  reportSnapshots ReportSnapshot[]
+  meetings        Meeting[]
+  messageThreads  MessageThread[]
+
+  @@index([orgId, status])
+  @@index([clientId])
+  @@index([orgId, type])
+}
+
+model AuditMember {
+  id       String  @id @default(cuid())
+  auditId  String
+  audit    Audit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role     String  @default("auditor") // "lead", "auditor", "reviewer", "approver"
+  joinedAt DateTime @default(now())
+
+  @@unique([auditId, userId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUDIT TEMPLATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditTemplate {
+  id          String   @id @default(cuid())
+  orgId       String?                               // null = global/system template
+  org         Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  name        String
+  description String?
+  type        AuditType @default(COMPLIANCE)
+  version     String   @default("1.0")
+  isPublished Boolean  @default(false)
+  isAiGenerated Boolean @default(false)
+  isGlobal    Boolean  @default(false)              // true = available to all orgs
+
+  sections    AuditTemplateSection[]
+  audits      Audit[]
+  packages    ProductPackage[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId, type])
+  @@index([orgId, isPublished])
+  @@index([isGlobal, isPublished])
+}
+
+model AuditTemplateSection {
+  id          String  @id @default(cuid())
+  templateId  String
+  template    AuditTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  sortOrder   Int     @default(0)
+  items       AuditTemplateItem[]
+
+  @@index([templateId])
+}
+
+model AuditTemplateItem {
+  id          String  @id @default(cuid())
+  sectionId   String
+  section     AuditTemplateSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  question    String
+  guidance    String?
+  riskWeight  Float   @default(1.0)  // multiplier for risk scoring
+  isRequired  Boolean @default(true)
+  evidenceRequired Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  @@index([sectionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUDIT SECTION (live audit instance of template sections)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditSection {
+  id          String  @id @default(cuid())
+  auditId     String
+  audit       Audit   @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  sortOrder   Int     @default(0)
+  completionPct Float @default(0)
+
+  checklistItems AuditChecklistItem[]
+
+  @@index([auditId])
+}
+
+model AuditChecklistItem {
+  id          String   @id @default(cuid())
+  sectionId   String
+  section     AuditSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  question    String
+  guidance    String?
+  response    String?  // "yes", "no", "partial", "n/a"
+  notes       String?
+  riskWeight  Float    @default(1.0)
+  isRequired  Boolean  @default(true)
+  evidenceRequired Boolean @default(false)
+  isCompleted Boolean  @default(false)
+  completedAt DateTime?
+  sortOrder   Int      @default(0)
+
+  evidence    Evidence[]
+
+  @@index([sectionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUDIT FINDING
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditFinding {
+  id          String          @id @default(cuid())
+  auditId     String
+  audit       Audit           @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?           @relation("FindingAssignee", fields: [assigneeId], references: [id])
+
+  findingNumber String?       // e.g. "F-001"
+  title       String
+  description String
+  severity    FindingSeverity @default(MEDIUM)
+  status      FindingStatus   @default(OPEN)
+  category    String?         // "access_control", "data_integrity", etc.
+
+  // Compliance mapping
+  controlRefs String[]        // e.g. ["SOC2-CC6.1", "ISO27001-A.9.2"]
+
+  // Details
+  rootCause   String?
+  impact      String?
+  likelihood  String?         // "low", "medium", "high"
+  riskScore   Float?          // 0-100
+
+  recommendation String?
+  managementResponse String?
+
+  dueDate     DateTime?
+  resolvedAt  DateTime?
+
+  evidence    Evidence[]
+  remediationActions RemediationAction[]
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([auditId, severity])
+  @@index([auditId, status])
+  @@index([assigneeId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EVIDENCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Evidence {
+  id              String       @id @default(cuid())
+  auditId         String
+  audit           Audit        @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  uploadedById    String?
+  uploadedBy      User?        @relation(fields: [uploadedById], references: [id])
+  findingId       String?
+  finding         AuditFinding? @relation(fields: [findingId], references: [id])
+  checklistItemId String?
+  checklistItem   AuditChecklistItem? @relation(fields: [checklistItemId], references: [id])
+
+  type            EvidenceType @default(FILE)
+  title           String
+  description     String?
+  fileUrl         String?      // Blob/S3 URL
+  fileName        String?
+  fileSize        Int?         // bytes
+  mimeType        String?
+  externalUrl     String?      // for LINK type
+  snapshotData    Json?        // for API_SNAPSHOT type
+
+  // Integrity
+  sha256Hash      String?      // file hash for tamper detection
+  collectedAt     DateTime     @default(now())
+
+  tags            String[]
+  createdAt       DateTime     @default(now())
+
+  @@index([auditId])
+  @@index([findingId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  REMEDIATION ACTION (CAPA)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model RemediationAction {
+  id          String        @id @default(cuid())
+  findingId   String
+  finding     AuditFinding  @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  assigneeId  String?
+  assignee    User?         @relation(fields: [assigneeId], references: [id])
+
+  title       String
+  description String
+  actionType  String?       // "corrective", "preventive"
+  priority    Priority      @default(MEDIUM)
+  status      TaskStatus    @default(TODO)
+
+  dueDate     DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  verificationNotes String?
+  verifiedById  String?
+  verifiedAt    DateTime?
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([findingId])
+  @@index([assigneeId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COMPLIANCE FRAMEWORK
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ComplianceFramework {
+  id          String                  @id @default(cuid())
+  orgId       String
+  org         Organization            @relation(fields: [orgId], references: [id])
+
+  name        String
+  type        ComplianceFrameworkType @default(CUSTOM)
+  version     String?
+  description String?
+  isActive    Boolean                 @default(true)
+
+  controls    ComplianceControl[]
+  auditMappings AuditFrameworkMapping[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId])
+}
+
+model ComplianceControl {
+  id            String              @id @default(cuid())
+  frameworkId   String
+  framework     ComplianceFramework @relation(fields: [frameworkId], references: [id], onDelete: Cascade)
+
+  controlId     String              // e.g. "CC6.1"
+  title         String
+  description   String
+  category      String?
+  testProcedure String?
+
+  @@index([frameworkId])
+}
+
+model AuditFrameworkMapping {
+  id          String              @id @default(cuid())
+  auditId     String
+  audit       Audit               @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  frameworkId String
+  framework   ComplianceFramework @relation(fields: [frameworkId], references: [id])
+  scope       String?             // which controls are in scope
+
+  @@unique([auditId, frameworkId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DOCUMENT / KNOWLEDGE BASE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Document {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+  createdById String
+  createdBy   User     @relation("DocumentCreator", fields: [createdById], references: [id])
+  parentId    String?  // folder support
+  parent      Document? @relation("DocTree", fields: [parentId], references: [id])
+  children    Document[] @relation("DocTree")
+
+  title       String
+  slug        String?
+  content     String?  // MDX/Markdown
+  fileUrl     String?  // for uploaded files
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
+  category    String?  // "policy", "procedure", "template", "report", "general"
+  isFolder    Boolean  @default(false)
+  isPublished Boolean  @default(false)
+  isTemplate  Boolean  @default(false)
+
+  tags        String[]
+  version     Int      @default(1)
+  viewCount   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([orgId, category])
+  @@index([clientId])
+  @@index([projectId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SKILLS & AVAILABILITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UserSkill {
+  id          String @id @default(cuid())
+  userId      String
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  skill       String
+  category    String? // "audit", "industry", "technical", "soft"
+  proficiency Int     @default(3) // 1-5 scale
+  yearsExp    Float?
+  isVerified  Boolean @default(false)
+
+  @@unique([userId, skill])
+  @@index([userId])
+}
+
+model Availability {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startDate   DateTime @db.Date
+  endDate     DateTime @db.Date
+  hoursPerDay Float    @default(8)
+  type        String   @default("available") // "available", "pto", "holiday", "allocated"
+  note        String?
+
+  @@index([userId, startDate])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  NOTIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        NotificationType @default(INFO)
+  title       String
+  message     String?
+  actionUrl   String?
+  actionLabel String?
+
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  // Source reference
+  entityType  String?  // "audit", "project", "invoice", etc.
+  entityId    String?
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ACTIVITY LOG (Immutable audit trail)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id])
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  // What happened
+  action      String   // e.g. "audit.finding.created", "invoice.sent", "user.role.changed"
+  entityType  String   // e.g. "AuditFinding", "Invoice", "User"
+  entityId    String
+  entityLabel String?  // human-readable label at time of action
+
+  // Who + when + where
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime @default(now())
+
+  // Snapshot of before/after for critical changes
+  beforeData  Json?
+  afterData   Json?
+  metadata    Json?
+
+  // References
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+  auditId     String?
+  audit       Audit?   @relation(fields: [auditId], references: [id])
+
+  @@index([orgId, timestamp])
+  @@index([userId, timestamp])
+  @@index([entityType, entityId])
+  @@index([auditId])
+  // NOTE: No updatedAt — this table is append-only/immutable
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INTEGRATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Integration {
+  id          String            @id @default(cuid())
+  orgId       String
+  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String            // "QuickBooks", "Google Workspace", etc.
+  slug        String            // "quickbooks", "google-workspace"
+  status      IntegrationStatus @default(PENDING_AUTH)
+
+  // OAuth tokens (encrypted in practice)
+  accessToken  String?
+  refreshToken String?
+  tokenExpiresAt DateTime?
+  scopes       String[]
+
+  // Config
+  config      Json   @default("{}")
+  webhookSecret String?
+  lastSyncAt  DateTime?
+  lastSyncStatus String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SURVEY RESPONSE — individual respondent submissions for WVW audit surveys
+// ─────────────────────────────────────────────────────────────────────────────
+model SurveyResponse {
+  id              String   @id @default(cuid())
+  auditId         String
+  audit           Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  // Respondent info (optional — can be anonymous)
+  respondentName  String?
+  respondentEmail String?
+  respondentRole  String?
+  respondentDept  String?
+
+  // Map of checklistItemId -> Likert value ("1"–"5")
+  responses       Json     @default("{}")
+
+  // Notes the respondent added (optional)
+  notes           String?
+
+  // Token used to submit — prevents duplicate submissions from same invite
+  token           String?  @unique
+
+  submittedAt     DateTime @default(now())
+
+  @@index([auditId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PATHWAY — WVW's 11 intervention pathways (P1-P11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Pathway {
+  id                    String         @id @default(cuid())
+  orgId                 String?        // null = global WVW pathway
+  org                   Organization?  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  slug                  String         @unique
+  name                  String
+  description           String?
+  pathwayNumber         Int            // P1-P11
+  priorityLevel         String         // "critical-intervention" | "stabilization" | "growth"
+  duration              String?        // e.g. "3-6 weeks"
+  targetLevels          String[]       // ["executive", "manager", "all-staff"]
+  focusAreas            String[]       // risk tag names
+  recommendedAuditSlugs String[]       // template ID slugs
+  sortOrder             Int            @default(0)
+  isActive              Boolean        @default(true)
+
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  recommendations       GeneratedRecommendation[]
+
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUDIT RESULT — computed scoring snapshot for an audit
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditResult {
+  id            String      @id @default(cuid())
+  auditId       String      @unique
+  audit         Audit       @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  overallScore  Float       // 0–100
+  riskBand      RiskBand
+  responseCount Int         @default(0)
+  questionCount Int         @default(0)
+
+  // Pattern-detected risk tags that triggered flags
+  flaggedRiskTags String[]
+
+  computedAt    DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  domainResults DomainResult[]
+  patternFlags  PatternFlag[]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DOMAIN RESULT — per-section scoring within an AuditResult
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DomainResult {
+  id             String      @id @default(cuid())
+  auditResultId  String
+  auditResult    AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
+
+  sectionId      String
+  sectionTitle   String
+
+  score          Float       // 0–100
+  riskBand       RiskBand
+  questionCount  Int
+  answeredCount  Int
+
+  // Top risk tags flagged in this domain
+  flaggedRiskTags String[]
+
+  @@index([auditResultId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PATTERN FLAG — a specific risk pattern detected across responses
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatternFlag {
+  id            String      @id @default(cuid())
+  auditResultId String
+  auditResult   AuditResult @relation(fields: [auditResultId], references: [id], onDelete: Cascade)
+
+  riskTag       String      // e.g. "retaliation", "burnout", "bias"
+  severity      String      // "critical" | "elevated" | "moderate"
+  avgScore      Float       // 0–100 (lower = more concerning)
+  questionCount Int
+
+  @@index([auditResultId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GENERATED RECOMMENDATION — pathway recs triggered by audit scoring
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GeneratedRecommendation {
+  id           String   @id @default(cuid())
+  auditId      String
+  audit        Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  pathwayId    String?
+  pathway      Pathway? @relation(fields: [pathwayId], references: [id])
+
+  triggerType  String   // "low-score" | "pattern-flag" | "risk-band"
+  triggerValue String   // e.g. "riskBand:CRITICAL", "riskTag:retaliation"
+
+  title        String
+  body         String
+  priority     Int      @default(0)
+
+  dismissedAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([auditId])
+  @@index([pathwayId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EMPLOYEE — client-side workforce records (distinct from platform Users)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EmploymentStatus {
+  ACTIVE
+  LEAVE
+  TERMINATED
+  CONTRACT
+  ONBOARDING
+}
+
+model Employee {
+  id                String           @id @default(cuid())
+  orgId             String
+  org               Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId          String?
+  client            Client?          @relation(fields: [clientId], references: [id])
+
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  title             String?
+  department        String?
+  location          String?
+  managerId         String?
+  manager           Employee?        @relation("ManagerReports", fields: [managerId], references: [id])
+  directReports     Employee[]       @relation("ManagerReports")
+
+  employmentStatus  EmploymentStatus @default(ACTIVE)
+  employmentType    String           @default("full-time") // "full-time"|"part-time"|"contract"|"intern"
+  startDate         DateTime?
+  endDate           DateTime?
+  level             String?          // "IC1","IC2","M1","Director","VP"
+  band              String?          // compensation band
+
+  // Flags
+  isNeurodivergent  Boolean?
+  hasAccommodation  Boolean          @default(false)
+  accommodationNote String?
+
+  // Metadata
+  tags              String[]
+  customFields      Json             @default("{}")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  trainingRecords   TrainingRecord[]
+  policyAcknowledgements PolicyAcknowledgement[]
+  onboardingWorkflows OnboardingWorkflow[]
+  courseAssignments CourseAssignment[]
+  cohortMemberships CohortMember[]
+  credentials       IssuedCredential[]
+  recognitionsReceived Recognition[] @relation("RecognitionsReceived")
+
+  @@index([orgId])
+  @@index([clientId])
+  @@index([managerId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TRAINING RECORD
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TrainingRecord {
+  id           String     @id @default(cuid())
+  orgId        String
+  employeeId   String
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  trainingName String
+  provider     String?
+  completedAt  DateTime?
+  expiresAt    DateTime?
+  score        Float?
+  passed       Boolean?
+  notes        String?
+
+  createdAt    DateTime   @default(now())
+
+  @@index([employeeId])
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  POLICY ACKNOWLEDGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PolicyAcknowledgement {
+  id           String    @id @default(cuid())
+  orgId        String
+  employeeId   String
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  policyName   String
+  version      String?
+  acknowledgedAt DateTime  @default(now())
+  ipAddress    String?
+
+  @@index([employeeId])
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CRM OPPORTUNITY
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum OpportunityStage {
+  PROSPECT
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+model Opportunity {
+  id           String           @id @default(cuid())
+  orgId        String
+  org          Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clientId     String?
+  client       Client?          @relation(fields: [clientId], references: [id])
+  ownerId      String?
+  owner        User?            @relation("OwnedOpportunities", fields: [ownerId], references: [id])
+
+  name         String
+  description  String?
+  stage        OpportunityStage @default(PROSPECT)
+  value        Float?           // estimated contract value
+  probability  Int              @default(50) // 0–100
+  closeDate    DateTime?
+
+  source       String?          // "referral" | "outbound" | "inbound" | "event"
+  lostReason   String?
+
+  tags         String[]
+  customFields Json             @default("{}")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  activities   CrmActivity[]
+
+  @@index([orgId, stage])
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CRM ACTIVITY LOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CrmActivity {
+  id             String       @id @default(cuid())
+  orgId          String
+  opportunityId  String?
+  opportunity    Opportunity? @relation(fields: [opportunityId], references: [id])
+  clientId       String?
+  client         Client?      @relation(fields: [clientId], references: [id])
+  userId         String?
+  user           User?        @relation("CrmActivities", fields: [userId], references: [id])
+
+  type           String       // "call" | "email" | "meeting" | "note" | "proposal"
+  subject        String
+  body           String?
+  occurredAt     DateTime     @default(now())
+
+  @@index([opportunityId])
+  @@index([clientId])
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COMMUNITY — structured discussion spaces, posts, comments, reactions
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CommunitySpaceType {
+  GENERAL
+  COHORT
+  IMPLEMENTATION
+  ANNOUNCEMENT
+  RESOURCE
+  ACADEMY
+}
+
+model CommunitySpace {
+  id          String              @id @default(cuid())
+  orgId       String
+  org         Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  type        CommunitySpaceType  @default(GENERAL)
+  slug        String
+  isPrivate   Boolean             @default(false)
+  isPinned    Boolean             @default(false)
+  isArchived  Boolean             @default(false)
+  iconEmoji   String?
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  posts       CommunityPost[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+}
+
+model CommunityPost {
+  id         String          @id @default(cuid())
+  spaceId    String
+  space      CommunitySpace  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?           @relation("CommunityPosts", fields: [authorId], references: [id])
+
+  title      String?
+  body       String
+  isPinned   Boolean         @default(false)
+  isAnnouncement Boolean     @default(false)
+  isArchived Boolean         @default(false)
+
+  // Structured announcement fields (null = regular post)
+  announcementType String?   // BIRTHDAY | PROMOTION | JOB_OPENING | JOB_CLOSING | ONBOARDING | OFFBOARDING | KUDOS | MILESTONE | EVENT | GENERAL
+  subjectName      String?   // Person or thing being announced
+  subjectId        String?   // Optional reference ID (employee, job posting, etc.)
+
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  comments   CommunityComment[]
+  reactions  CommunityReaction[]
+
+  @@index([spaceId])
+  @@index([authorId])
+  @@index([announcementType])
+}
+
+model CommunityComment {
+  id       String        @id @default(cuid())
+  postId   String
+  post     CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId String?
+  author   User?         @relation("CommunityComments", fields: [authorId], references: [id])
+  parentId String?
+  parent   CommunityComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  CommunityComment[] @relation("CommentReplies")
+
+  body      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([postId])
+  @@index([parentId])
+}
+
+model CommunityReaction {
+  id       String        @id @default(cuid())
+  postId   String
+  post     CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User          @relation("CommunityReactions", fields: [userId], references: [id])
+  emoji    String        // "👍" | "❤️" | "💡" | "🙏"
+
+  @@unique([postId, userId, emoji])
+  @@index([postId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  REPORT SNAPSHOT — immutable generated report records
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ReportType {
+  EXECUTIVE_SUMMARY
+  FULL_AUDIT
+  DOMAIN_BREAKDOWN
+  BUNDLE_RECOMMENDATION
+  WORKFORCE_SNAPSHOT
+  CLIENT_HEALTH
+  TRAINING_PARTICIPATION
+}
+
+model ReportSnapshot {
+  id          String     @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  auditId     String?
+  audit       Audit?     @relation(fields: [auditId], references: [id])
+  generatedById String?
+  generatedBy   User?    @relation("GeneratedReports", fields: [generatedById], references: [id])
+
+  type        ReportType
+  title       String
+  summary     String?
+  data        Json       @default("{}")  // full report payload snapshot
+  fileUrl     String?    // PDF export URL (Vercel Blob)
+  version     Int        @default(1)
+  isPublished Boolean    @default(false)
+
+  generatedAt DateTime   @default(now())
+
+  @@index([orgId, type])
+  @@index([auditId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  JOB BOARD
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum JobPostingType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  VOLUNTEER
+  FREELANCE
+}
+
+enum JobPostingStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+  FILLED
+}
+
+enum ApplicationStatus {
+  NEW
+  REVIEWING
+  INTERVIEW
+  OFFERED
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+model JobPosting {
+  id           String           @id @default(cuid())
+  orgId        String
+  org          Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  postedById   String?
+  postedBy     User?            @relation("PostedJobs", fields: [postedById], references: [id])
+
+  title        String
+  type         JobPostingType
+  status       JobPostingStatus @default(DRAFT)
+  department   String?
+  location     String?
+  remote       Boolean          @default(false)
+  description  String           @db.Text
+  requirements String?          @db.Text
+  benefits     String?          @db.Text
+
+  // Compensation (null for volunteer)
+  salaryMin    Float?
+  salaryMax    Float?
+  salaryUnit   String?          // "hourly" | "annual" | "stipend"
+
+  // Internship-specific
+  duration     String?          // "3 months", "Summer 2025"
+  isPaid       Boolean?
+
+  closingDate  DateTime?
+  publishedAt  DateTime?
+
+  externalUrls String[]         // links to LinkedIn/Indeed listings
+  tags         String[]
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  applications JobApplication[]
+
+  @@index([orgId, status])
+  @@index([orgId, type])
+}
+
+model JobApplication {
+  id          String            @id @default(cuid())
+  orgId       String
+  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  postingId   String
+  posting     JobPosting        @relation(fields: [postingId], references: [id], onDelete: Cascade)
+
+  firstName   String
+  lastName    String
+  email       String
+  phone       String?
+  linkedIn    String?
+  portfolio   String?
+  resumeUrl   String?
+  coverLetter String?           @db.Text
+  answers     Json              @default("{}")
+
+  status      ApplicationStatus @default(NEW)
+  rating      Int?              // 1–5
+  notes       String?           @db.Text
+  reviewedById String?
+  reviewedBy   User?            @relation("ReviewedApplications", fields: [reviewedById], references: [id])
+
+  interviewAt DateTime?         // scheduled interview date/time
+  appliedAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([postingId, status])
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MEETINGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Meeting {
+  id          String   @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?    @relation("CreatedMeetings", fields: [createdById], references: [id])
+
+  title       String
+  description String?  @db.Text
+  type        String   @default("GENERAL") // KICKOFF | STATUS | FINDINGS | EXIT | INTERVIEW | INTERNAL | GENERAL
+  status      String   @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED | TENTATIVE
+  location    String?  // room name, Zoom link, address
+  meetingUrl  String?  // video call link
+
+  scheduledAt DateTime
+  duration    Int      @default(60) // minutes
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  auditId     String?
+  audit       Audit?   @relation(fields: [auditId], references: [id])
+
+  attendeeIds String[] // user IDs (denormalized for simplicity)
+  notes       String?  @db.Text
+  actionItems String?  @db.Text
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([orgId, scheduledAt])
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SERVICE LIBRARY
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ServiceCategory {
+  AUDIT
+  TRAINING
+  CONSULTING
+  COACHING
+  ASSESSMENT
+  WORKSHOP
+  RETAINER
+  OTHER
+}
+
+model ServiceOffering {
+  id          String          @id @default(cuid())
+  orgId       String
+  org         Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  slug        String
+  category    ServiceCategory @default(OTHER)
+  description String          @db.Text
+  deliverables String?        @db.Text  // bullet-point deliverables
+  duration    String?         // "2 weeks", "4 hours", "Ongoing"
+  format      String?         // "Virtual", "On-site", "Hybrid"
+  audience    String?         // "Manager-level", "All staff", "HR teams"
+  priceMin    Float?
+  priceMax    Float?
+  priceUnit   String?         // "per engagement", "per person", "monthly"
+  isActive    Boolean         @default(true)
+  isFeatured  Boolean         @default(false)
+  tags        String[]
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([orgId, slug])
+  @@index([orgId, category])
+  @@index([orgId, isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GRANT TRACKING
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum GrantStatus {
+  RESEARCHING
+  DRAFTING
+  SUBMITTED
+  UNDER_REVIEW
+  AWARDED
+  REJECTED
+  WITHDRAWN
+}
+
+model Grant {
+  id            String      @id @default(cuid())
+  orgId         String
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedToId  String?
+  assignedTo    User?        @relation("AssignedGrants", fields: [assignedToId], references: [id])
+
+  name          String
+  funder        String       // granting organization
+  programName   String?      // specific grant program
+  description   String?      @db.Text
+  status        GrantStatus  @default(RESEARCHING)
+  amount        Float?       // requested/awarded amount
+  amountAwarded Float?
+  deadline      DateTime?
+  submittedAt   DateTime?
+  decisionAt    DateTime?    // when we expect/got decision
+  reportDueAt   DateTime?    // if awarded, when is the report due
+
+  requirements  String?      @db.Text
+  notes         String?      @db.Text
+  attachmentUrls String[]
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([orgId, status])
+  @@index([orgId, deadline])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ONBOARDING / OFFBOARDING WORKFLOWS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum WorkflowType {
+  ONBOARDING
+  OFFBOARDING
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  BLOCKED
+}
+
+model OnboardingWorkflow {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  employeeId  String
+  employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type        WorkflowType @default(ONBOARDING)
+  status      String       @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED
+  startDate   DateTime     @default(now())
+  targetDate  DateTime?    // expected completion
+  completedAt DateTime?
+  notes       String?      @db.Text
+
+  steps       OnboardingStep[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([orgId, type])
+  @@index([employeeId])
+}
+
+model OnboardingStep {
+  id           String              @id @default(cuid())
+  workflowId   String
+  workflow     OnboardingWorkflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  assignedToId String?
+  assignedTo   User?               @relation("AssignedOnboardingSteps", fields: [assignedToId], references: [id])
+
+  title        String
+  description  String?             @db.Text
+  category     String              @default("GENERAL") // IT | HR | CULTURE | LEGAL | TRAINING | INTRO | GENERAL
+  dueDate      DateTime?
+  sortOrder    Int                 @default(0)
+  status       WorkflowStepStatus  @default(PENDING)
+  completedAt  DateTime?
+  notes        String?             @db.Text
+
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([workflowId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COURSE / LMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum CourseCategory {
+  ONBOARDING      // Required for new hires
+  ANNUAL          // Required yearly
+  QUARTERLY       // Required every quarter
+  MANDATORY       // Required regardless of schedule
+  COMPLIANCE      // Compliance/legal requirement
+  LEADERSHIP      // Leadership development
+  DEI             // Diversity, Equity & Inclusion
+  WELLBEING       // Mental health / wellness
+  SKILLS          // Skill building
+  ELECTIVE        // Optional / self-directed
+}
+
+model Course {
+  id           String        @id @default(cuid())
+  orgId        String
+  org          Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdById  String?
+  createdBy    User?         @relation("CreatedCourses", fields: [createdById], references: [id])
+
+  title        String
+  slug         String
+  description  String        @db.Text
+  category     CourseCategory @default(ELECTIVE)
+  level        CourseLevel   @default(BEGINNER)
+  duration     String?       // "90 min", "4 weeks"
+  format       String?       // "Video", "Live session", "Self-paced", "Hybrid"
+  audience     String?       // "All staff", "Managers", "HR"
+  modules      Int           @default(1)
+  isActive     Boolean       @default(true)
+  isPublished  Boolean       @default(false)
+  passingScore Int           @default(70) // percentage
+  thumbnailUrl String?
+  contentUrl   String?       // link to actual course content (LMS, Google Drive, SharePoint, etc.)
+  tags         String[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  assignments  CourseAssignment[]
+
+  @@unique([orgId, slug])
+  @@index([orgId, category])
+  @@index([orgId, isActive])
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  EXEMPT
+  OVERDUE
+}
+
+model CourseAssignment {
+  id           String           @id @default(cuid())
+  orgId        String
+  courseId     String
+  course       Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assignedById String?
+  assignedBy   User?            @relation("AssignedCourses", fields: [assignedById], references: [id])
+
+  status       AssignmentStatus @default(ASSIGNED)
+  dueDate      DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  score        Float?           // 0-100
+  passed       Boolean?
+  attempts     Int              @default(0)
+  notes        String?          @db.Text
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([courseId, employeeId])
+  @@index([orgId])
+  @@index([employeeId])
+  @@index([courseId, status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MESSAGING
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MessageThread {
+  id             String       @id @default(cuid())
+  orgId          String
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  title          String?      // null = DM derived from participant names; set for group threads
+  isGroup        Boolean      @default(false)
+  participantIds String[]     // denormalized user IDs for fast access checks
+
+  // Optional context links
+  clientId       String?
+  client         Client?      @relation(fields: [clientId], references: [id])
+  auditId        String?
+  audit          Audit?       @relation(fields: [auditId], references: [id])
+
+  lastMessageAt  DateTime?
+  createdById    String?
+  createdBy      User?        @relation("CreatedThreads", fields: [createdById], references: [id])
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  messages       Message[]
+
+  @@index([orgId])
+  @@index([orgId, lastMessageAt(sort: Desc)])
+}
+
+model Message {
+  id        String        @id @default(cuid())
+  orgId     String
+  threadId  String
+  thread    MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User          @relation("SentMessages", fields: [senderId], references: [id])
+
+  body      String        @db.Text
+  readBy    String[]      // user IDs who have read this message
+
+  createdAt DateTime      @default(now())
+  editedAt  DateTime?
+
+  @@index([threadId, createdAt])
+  @@index([orgId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EMPLOYEE GOALS / OKRs
+// ─────────────────────────────────────────────────────────────────────────────
+
+model EmployeeGoal {
+  id          String         @id @default(cuid())
+  orgId       String
+
+  title       String
+  description String?        @db.Text
+  owner       String?        // team or person name
+  quarter     String?        // "Q1 2026"
+  progress    Int            @default(0) // 0–100
+  status      String         @default("ACTIVE") // ACTIVE | COMPLETED | ARCHIVED
+
+  keyResults  GoalKeyResult[]
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+model GoalKeyResult {
+  id       String       @id @default(cuid())
+  goalId   String
+  goal     EmployeeGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  title    String
+  current  String?      // display value e.g. "62 days"
+  target   String       // display value e.g. "55 days"
+  progress Int          @default(0) // 0–100
+
+  @@index([goalId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PRODUCT PACKAGES — Audit + Training + Notion bundles (licensable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ProductPackage {
+  id              String         @id @default(cuid())
+  orgId           String?        // null = global WVW package available to all
+
+  name            String
+  slug            String         @unique
+  tagline         String?        // short marketing line
+  description     String?        @db.Text
+  category        String?        // "Culture Audit", "HR Compliance", "Leadership"
+  audience        String?        // "HR Teams", "Managers", "All Staff"
+  duration        String?        // "3 weeks", "90 days"
+
+  // What's included
+  auditTemplateId String?
+  auditTemplate   AuditTemplate? @relation(fields: [auditTemplateId], references: [id])
+  courseIds       String[]       // linked Course IDs
+  notionUrl       String?        // Notion tracker URL
+  notionLabel     String?        // display name for tracker
+
+  // Pricing / licensing
+  pricePerUse     Float?
+  priceMonthly    Float?
+  currency        String         @default("USD")
+
+  deliverables    String[]
+  tags            String[]
+  isActive        Boolean        @default(true)
+  isFeatured      Boolean        @default(false)
+
+  licenses        PackageLicense[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([orgId])
+  @@index([isActive])
+}
+
+model PackageLicense {
+  id         String         @id @default(cuid())
+  orgId      String
+  packageId  String
+  package    ProductPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  clientId   String?
+  client     Client?        @relation(fields: [clientId], references: [id])
+
+  status     String         @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED
+  licensedAt DateTime       @default(now())
+  expiresAt  DateTime?
+  notes      String?
+
+  @@index([orgId])
+  @@index([packageId])
+  @@index([clientId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COHORTS — Academy cohort tracking
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Cohort {
+  id          String        @id @default(cuid())
+  orgId       String
+  org         Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String
+  code        String?
+  track       String?
+  description String?       @db.Text
+  status      String        @default("UPCOMING") // UPCOMING | ACTIVE | COMPLETED | PAUSED
+  startDate   DateTime?
+  endDate     DateTime?
+  capacity    Int?
+  courseIds   String[]
+
+  members     CohortMember[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+model CohortMember {
+  id          String    @id @default(cuid())
+  cohortId    String
+  cohort      Cohort    @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  employeeId  String?
+  employee    Employee? @relation(fields: [employeeId], references: [id])
+  name        String?
+  email       String?
+  progress    Int       @default(0)
+  status      String    @default("ENROLLED") // ENROLLED | COMPLETED | DROPPED
+  enrolledAt  DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([cohortId])
+  @@index([employeeId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ISSUED CREDENTIALS — WVW credentialing
+// ─────────────────────────────────────────────────────────────────────────────
+
+model IssuedCredential {
+  id              String    @id @default(cuid())
+  orgId           String
+
+  recipientName   String
+  recipientId     String?
+  employee        Employee? @relation(fields: [recipientId], references: [id])
+
+  credentialCode  String    // WAA, WCA, WCS, WEP
+  credentialTitle String
+  issuedAt        DateTime  @default(now())
+  expiresAt       DateTime?
+  verifyId        String    @unique
+  status          String    @default("ACTIVE") // ACTIVE | EXPIRED | REVOKED
+  notes           String?   @db.Text
+
+  @@index([orgId])
+  @@index([credentialCode])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EXTERNAL SIGNALS — Regulatory / industry signals
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExternalSignal {
+  id             String       @id @default(cuid())
+  orgId          String
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  category       String       // "Regulatory Changes" | "Industry Trends" | "Threat Intelligence" | "Client Intelligence" | "Other"
+  title          String
+  source         String?
+  severity       String       @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  summary        String?      @db.Text
+  actionRequired String?
+  signalDate     DateTime?
+  url            String?
+  isActive       Boolean      @default(true)
+  addedById      String?
+
+  createdAt      DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([orgId, isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  RECOGNITION — Peer recognition wall
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Recognition {
+  id           String       @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  fromUserId   String?
+  fromUser     User?        @relation("RecognitionsGiven", fields: [fromUserId], references: [id])
+  toName       String
+  toEmployeeId String?
+  toEmployee   Employee?    @relation("RecognitionsReceived", fields: [toEmployeeId], references: [id])
+
+  type         String       // "Star Performer" | "Team Player" | "Innovation" | "Above & Beyond" | "Growth Champion"
+  message      String       @db.Text
+  isPublic     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([orgId, createdAt])
+}
