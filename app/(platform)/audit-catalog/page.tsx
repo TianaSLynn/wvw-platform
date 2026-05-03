@@ -67,10 +67,16 @@ export default async function AuditCatalogPage() {
         iconBg="bg-blue-500/10 border-blue-500/20"
         iconColor="text-blue-500"
         actions={
-          <Link href="/audits/new" className="btn-primary flex items-center gap-2">
-            <Plus size={16} />
-            Launch Audit
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/audit-catalog/new" className="btn-ghost flex items-center gap-1.5 text-sm">
+              <Plus size={14} />
+              New Template
+            </Link>
+            <Link href="/audits/new" className="btn-primary flex items-center gap-2">
+              <Plus size={16} />
+              Launch Audit
+            </Link>
+          </div>
         }
       />
 
@@ -155,8 +161,8 @@ export default async function AuditCatalogPage() {
               <BookOpen size={28} className="text-muted-foreground/40" />
             </div>
             <p className="text-sm font-medium text-foreground">No custom templates yet</p>
-            <p className="text-xs text-muted-foreground mt-1">Start from a framework template above or create one from scratch</p>
-            <Link href="/audits/new" className="btn-primary mt-4 text-xs">Create Audit</Link>
+            <p className="text-xs text-muted-foreground mt-1">Add your own audit services to offer clients</p>
+            <Link href="/audit-catalog/new" className="btn-primary mt-4 text-xs">Create Template</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
