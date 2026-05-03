@@ -6,12 +6,11 @@ import { ChevronLeft, Users, Shield, ChevronDown, Check, Copy, ExternalLink, Use
 import { cn } from "@/lib/utils";
 
 const ROLES = [
-  { value: "VIEWER",        label: "Viewer",        desc: "Read-only access to assigned content" },
-  { value: "STAFF",         label: "Staff",          desc: "Create and update own work items" },
-  { value: "SENIOR_STAFF",  label: "Senior Staff",   desc: "Create, update, and review work items" },
-  { value: "MANAGER",       label: "Manager",        desc: "Manage team, approve timesheets" },
-  { value: "PARTNER",       label: "Partner",        desc: "Full access to all org data" },
-  { value: "ADMIN",         label: "Admin",          desc: "Full access + settings management" },
+  { value: "CONSULTANT", label: "Consultant", desc: "Create and update own work items" },
+  { value: "AUDITOR",    label: "Auditor",    desc: "Conduct audits, log findings and evidence" },
+  { value: "MANAGER",    label: "Manager",    desc: "Manage team and approve work items" },
+  { value: "PARTNER",    label: "Partner",    desc: "Full access to all org data" },
+  { value: "ADMIN",      label: "Admin",      desc: "Full access + settings management" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
@@ -19,9 +18,10 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN:       "bg-orange-50 dark:bg-orange-950/30 text-orange-600 border-orange-200 dark:border-orange-800",
   PARTNER:     "bg-gold/10 text-amber-700 border-gold/20",
   MANAGER:     "bg-blue-50 dark:bg-blue-950/30 text-blue-600 border-blue-200 dark:border-blue-800",
-  SENIOR_STAFF:"bg-purple-50 dark:bg-purple-950/30 text-purple-600 border-purple-200 dark:border-purple-800",
-  STAFF:       "bg-gray-50 dark:bg-gray-900/50 text-gray-600 border-gray-200 dark:border-gray-700",
-  VIEWER:      "bg-gray-50 dark:bg-gray-900/50 text-gray-500 border-gray-200 dark:border-gray-700",
+  AUDITOR:     "bg-purple-50 dark:bg-purple-950/30 text-purple-600 border-purple-200 dark:border-purple-800",
+  CONSULTANT:  "bg-gray-50 dark:bg-gray-900/50 text-gray-600 border-gray-200 dark:border-gray-700",
+  CLIENT_ADMIN:"bg-teal-50 dark:bg-teal-950/30 text-teal-600 border-teal-200 dark:border-teal-800",
+  CLIENT_USER: "bg-gray-50 dark:bg-gray-900/50 text-gray-500 border-gray-200 dark:border-gray-700",
 };
 
 interface Member {
