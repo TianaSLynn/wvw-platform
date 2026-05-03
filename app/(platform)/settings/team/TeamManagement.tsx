@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Users, Shield, ChevronDown, Check, Copy, ExternalLink } from "lucide-react";
+import { ChevronLeft, Users, Shield, ChevronDown, Check, Copy, ExternalLink, UserPlus, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ROLES = [
@@ -42,6 +42,17 @@ export default function TeamManagement({ members, currentUserId, isAdmin }: Prop
   const [updatingId, setUpdatingId]  = useState<string | null>(null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [portalData, setPortalData]  = useState<{ url: string; copied: boolean } | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  const signUpUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/sign-up`
+    : `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/sign-up`;
+
+  const copyInviteLink = async () => {
+    await navigator.clipboard.writeText(signUpUrl);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 3000);
+  };
 
   const changeRole = async (userId: string, role: string) => {
     setUpdatingId(userId);
@@ -74,12 +85,6 @@ export default function TeamManagement({ members, currentUserId, isAdmin }: Prop
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
-        >
-          <ChevronLeft size={16} /> Back to Settings
-        </button>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-navy-900 to-navy-700 border border-gold/20 flex items-center justify-center">
@@ -92,6 +97,36 @@ export default function TeamManagement({ members, currentUserId, isAdmin }: Prop
           </div>
         </div>
       </div>
+
+      {/* Invite section */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <UserPlus size={15} className="text-gold" />
+            <p className="text-sm font-semibold">Invite Team Members</p>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Share this link with anyone you want to add to WVW Intelligence. When they sign up, they&apos;ll automatically join your organization.
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-muted/50 border border-border rounded-xl text-xs font-mono truncate">
+              <Link2 size={11} className="text-muted-foreground flex-shrink-0" />
+              <span className="truncate text-muted-foreground">{signUpUrl}</span>
+            </div>
+            <button
+              type="button"
+              onClick={copyInviteLink}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-navy-900 text-white text-xs font-medium hover:bg-navy-800 transition-colors flex-shrink-0"
+            >
+              {inviteCopied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+              {inviteCopied ? "Copied!" : "Copy Link"}
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            New members join with <span className="font-medium">Consultant</span> access by default. Use the role controls below to change permissions after they join.
+          </p>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         <table className="w-full text-sm">

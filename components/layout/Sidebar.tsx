@@ -5,14 +5,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type { User, Organization } from "@prisma/client";
 import {
-  LayoutDashboard, Users, Briefcase, ClipboardList, BarChart2, Target,
-  Shield, Lightbulb, FolderOpen, FileText, Settings, DollarSign,
-  BookOpen, Zap, RefreshCw, X, Flame, Radio, Layers, CalendarDays,
-  Mic, Archive, TrendingUp, Star, Receipt, Heart, Sparkles, CheckSquare,
-  Repeat2, GraduationCap, FileEdit, ListOrdered, Award, Scale, Activity,
-  Clock, Brain, Calendar, Wrench, Gift, MessageSquare,
-  Cpu, UserCircle, Library, Bell,
-  MessageCircle, Building2, Hash, Megaphone, Trophy,
+  LayoutDashboard, Users, ClipboardList, BookOpen,
+  DollarSign, Settings, Briefcase, FolderOpen, FileText,
+  GraduationCap, Award, TrendingUp, Receipt, BarChart2,
+  Building2, MessageCircle, Calendar, Brain, Star,
+  Scale, X, Bell, Shield, Target,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -32,24 +29,41 @@ interface NavSection {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    title: "Intelligence",
+    title: "Home",
     items: [
-      { to: "/dashboard",    icon: LayoutDashboard, label: "Dashboard" },
-      { to: "/ai-command",   icon: Brain,            label: "AI Command Center" },
-      { to: "/ai-engines",   icon: Cpu,              label: "AI Engine Hub" },
-      { to: "/calendar",     icon: Calendar,         label: "Calendar" },
-      { to: "/clients",      icon: Users,            label: "Clients" },
-      { to: "/operations",   icon: Wrench,           label: "Operations" },
-      { to: "/engagements",  icon: Briefcase,        label: "Engagements" },
+      { to: "/dashboard",  icon: LayoutDashboard, label: "Dashboard" },
+      { to: "/calendar",   icon: Calendar,        label: "Calendar" },
+      { to: "/ai-command", icon: Brain,            label: "AI Command" },
     ],
   },
   {
-    title: "Audits & Packages",
+    title: "Clients & Audits",
     items: [
+      { to: "/clients",       icon: Users,        label: "Clients" },
       { to: "/audits",        icon: ClipboardList, label: "Audit Registry" },
       { to: "/audit-catalog", icon: BookOpen,      label: "Audit Catalog" },
-      { to: "/packages",      icon: Layers,        label: "Package Catalog", badge: "NEW" },
-      { to: "/pathways",      icon: Zap,           label: "Pathway Engine" },
+      { to: "/evidence",      icon: FolderOpen,    label: "Evidence Vault" },
+      { to: "/reports",       icon: FileText,      label: "Reports" },
+      { to: "/engagements",   icon: Briefcase,     label: "Engagements" },
+    ],
+  },
+  {
+    title: "Finance & Business",
+    items: [
+      { to: "/invoices",   icon: Receipt,    label: "Invoices" },
+      { to: "/financials", icon: DollarSign, label: "Financials" },
+      { to: "/pipeline",   icon: TrendingUp, label: "Sales Pipeline" },
+      { to: "/packages",   icon: Target,     label: "Packages" },
+      { to: "/grants",     icon: Award,      label: "Grants" },
+    ],
+  },
+  {
+    title: "People & HR",
+    items: [
+      { to: "/workforce",      icon: Building2, label: "Workforce / HRIS" },
+      { to: "/people",         icon: Users,     label: "People & Culture" },
+      { to: "/jobs",           icon: Briefcase, label: "Jobs & Hiring" },
+      { to: "/people/time",    icon: BarChart2, label: "Time Tracking" },
     ],
   },
   {
@@ -58,153 +72,33 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/academy",             icon: GraduationCap, label: "Academy Home" },
       { to: "/academy/courses",     icon: BookOpen,      label: "Courses" },
       { to: "/academy/students",    icon: Users,         label: "Students" },
-      { to: "/academy/cohorts",     icon: Hash,          label: "Cohorts" },
-      { to: "/academy/practicum",   icon: Briefcase,     label: "Practicum" },
       { to: "/academy/credentials", icon: Award,         label: "Credentials" },
     ],
   },
   {
-    title: "Analysis",
+    title: "Analytics",
     items: [
-      { to: "/benchmarks",      icon: BarChart2,  label: "Benchmarks" },
-      { to: "/kpis",            icon: Target,     label: "KPI Library" },
-      { to: "/external-signals",icon: Radio,      label: "External Signals" },
-      { to: "/policies",        icon: Shield,     label: "Policies" },
-      { to: "/recommendations", icon: Lightbulb,  label: "Recommendations" },
+      { to: "/executive",   icon: Star,     label: "Executive Dashboard" },
+      { to: "/kpis",        icon: Target,   label: "KPIs" },
+      { to: "/benchmarks",  icon: BarChart2, label: "Benchmarks" },
     ],
   },
   {
-    title: "Workspace",
+    title: "Organization",
     items: [
-      { to: "/evidence", icon: FolderOpen, label: "Evidence Vault" },
-      { to: "/reports",  icon: FileText,   label: "Reports" },
-    ],
-  },
-  {
-    title: "Financial",
-    items: [
-      { to: "/financials", icon: DollarSign, label: "Financial Intelligence" },
-      { to: "/invoices",   icon: Receipt,    label: "Invoices & Payments" },
-      { to: "/grants",     icon: Trophy,     label: "Grant Tracker" },
-    ],
-  },
-  {
-    title: "Executive",
-    items: [
-      { to: "/executive", icon: Star,       label: "Executive Dashboard" },
-      { to: "/pipeline",  icon: TrendingUp, label: "Sales Pipeline" },
-    ],
-  },
-  {
-    title: "Operations",
-    items: [
-      { to: "/meetings", icon: CalendarDays,  label: "Meeting Center" },
-      { to: "/messages", icon: MessageSquare, label: "Messages" },
-      { to: "/team",     icon: UserCircle,    label: "WVW Team" },
-    ],
-  },
-  {
-    title: "Libraries",
-    items: [
-      { to: "/service-library", icon: Library, label: "Service Library" },
-      { to: "/assets",          icon: Archive, label: "Asset Registry" },
-    ],
-  },
-  {
-    title: "Risk Intelligence",
-    items: [
-      { to: "/burnout-tracker",     icon: Flame,  label: "Burnout Tracker" },
-      { to: "/decision-engine",     icon: Shield, label: "Decision Engine" },
-      { to: "/intersectional-risk", icon: Layers, label: "Intersectional Risk" },
-    ],
-  },
-  {
-    title: "Employee Experience",
-    items: [
-      { to: "/employee/wellness-coach",     icon: Sparkles,      label: "Wellness Coach" },
-      { to: "/employee/onboarding-hub",     icon: Gift,          label: "Onboarding Hub" },
-      { to: "/employee/benefits",           icon: Heart,         label: "Benefits & Wellness" },
-      { to: "/employee/psych-safety",       icon: Shield,        label: "Psych Safety" },
-      { to: "/employee/manager-health",     icon: Users,         label: "Manager Health" },
-      { to: "/employee/burnout-prevention", icon: Flame,         label: "Burnout Prevention" },
-      { to: "/employee/recognition",        icon: Star,          label: "Recognition" },
-      { to: "/employee/culture-scanner",    icon: MessageSquare, label: "Culture Scanner" },
-    ],
-  },
-  {
-    title: "People & Culture",
-    items: [
-      { to: "/people",             icon: Users,       label: "People Home" },
-      { to: "/people/staff",       icon: Users,       label: "Staff Directory" },
-      { to: "/people/performance", icon: Award,       label: "Performance" },
-      { to: "/people/goals",       icon: Target,      label: "Goals & OKRs" },
-      { to: "/people/time",        icon: Clock,       label: "Time Tracking" },
-      { to: "/people/capacity",    icon: Activity,    label: "Capacity" },
-      { to: "/people/onboarding",  icon: CheckSquare, label: "Onboarding" },
-    ],
-  },
-  {
-    title: "Workforce (HRIS)",
-    items: [
-      { to: "/workforce",            icon: Building2,   label: "Employee Directory" },
-      { to: "/workforce/training",   icon: BookOpen,    label: "Training Records" },
-      { to: "/workforce/policies",   icon: Shield,      label: "Policy Acknowledgements" },
-      { to: "/workforce/onboarding", icon: CheckSquare, label: "Onboarding Workflows" },
-    ],
-  },
-  {
-    title: "Talent & Hiring",
-    items: [
-      { to: "/jobs",       icon: Megaphone, label: "Job Board" },
-      { to: "/interviews", icon: Mic,       label: "Interviews" },
-    ],
-  },
-  {
-    title: "Community",
-    items: [
-      { to: "/community",               icon: MessageCircle, label: "Community Spaces" },
-      { to: "/community/announcements", icon: Hash,          label: "Announcements" },
-      { to: "/community/cohorts",       icon: Users,         label: "Cohorts" },
-      { to: "/community/resources",     icon: FolderOpen,    label: "Resources" },
-    ],
-  },
-  {
-    title: "Governance",
-    items: [
-      { to: "/governance",          icon: Scale,        label: "Governance Home" },
-      { to: "/governance/board",    icon: Scale,        label: "Board Members" },
-      { to: "/governance/meetings", icon: CalendarDays, label: "Board Meetings" },
-    ],
-  },
-  {
-    title: "Quality & Growth",
-    items: [
-      { to: "/quality",               icon: Star,        label: "Quality Home" },
-      { to: "/quality/surveys",       icon: CheckSquare, label: "Satisfaction Surveys" },
-      { to: "/quality/qbr",           icon: BarChart2,   label: "QBR Reports" },
-      { to: "/quality/impact",        icon: TrendingUp,  label: "Impact & ROI" },
-      { to: "/quality/change-orders", icon: FileEdit,    label: "Change Orders" },
-      { to: "/quality/waitlist",      icon: ListOrdered, label: "Waitlist" },
-    ],
-  },
-  {
-    title: "Add-On Packs",
-    items: [
-      { to: "/addons/client-experience",     icon: Heart,       label: "Client Experience" },
-      { to: "/addons/lead-pipeline",         icon: Sparkles,    label: "Lead & Discovery" },
-      { to: "/addons/readiness",             icon: CheckSquare, label: "Readiness Engine" },
-      { to: "/addons/implementation-engine", icon: Layers,      label: "Strategy & Impl." },
-      { to: "/addons/retainers",             icon: Repeat2,     label: "Retainer & Expansion" },
-      { to: "/addons/executive-delivery",    icon: Star,        label: "Executive Delivery" },
+      { to: "/community",  icon: MessageCircle, label: "Community" },
+      { to: "/governance", icon: Scale,         label: "Governance" },
+      { to: "/meetings",   icon: Calendar,      label: "Meetings" },
+      { to: "/quality",    icon: Shield,        label: "Quality" },
     ],
   },
   {
     title: "System",
     items: [
-      { to: "/notifications", icon: Bell,      label: "Notifications" },
-      { to: "/settings",      icon: Settings,  label: "Settings" },
-      { to: "/admin",         icon: Settings,  label: "Admin" },
-      { to: "/sync",          icon: RefreshCw, label: "Sync Status" },
+      { to: "/notifications",       icon: Bell,     label: "Notifications" },
+      { to: "/settings/team",       icon: Users,    label: "Team Members" },
+      { to: "/settings/organization", icon: Building2, label: "Org Settings" },
+      { to: "/settings/integrations", icon: Settings,  label: "Integrations" },
     ],
   },
 ];
@@ -248,7 +142,6 @@ function NavLink({ item }: { item: NavItem }) {
 export default function Sidebar({ user, mobileOpen = false, onClose }: SidebarProps) {
   return (
     <>
-      {/* Mobile backdrop */}
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
@@ -257,7 +150,6 @@ export default function Sidebar({ user, mobileOpen = false, onClose }: SidebarPr
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cn(
           "fixed top-0 left-0 h-full w-64 bg-navy-900 flex flex-col shadow-nav z-40",
@@ -280,12 +172,8 @@ export default function Sidebar({ user, mobileOpen = false, onClose }: SidebarPr
                 </div>
               )}
               <div className="min-w-0">
-                <div className="text-white font-bold text-sm leading-tight truncate">
-                  WVW Intelligence
-                </div>
-                <div className="text-white/35 text-[11px] leading-tight">
-                  Master Diagnostic System
-                </div>
+                <div className="text-white font-bold text-sm leading-tight truncate">WVW Intelligence</div>
+                <div className="text-white/35 text-[11px] leading-tight">Master Diagnostic System</div>
               </div>
             </div>
             <button
@@ -326,17 +214,12 @@ export default function Sidebar({ user, mobileOpen = false, onClose }: SidebarPr
               </span>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-white/70 text-xs font-medium truncate">
-                {user.firstName} {user.lastName}
-              </p>
-              <p className="text-white/30 text-[10px] truncate capitalize">
-                {user.role.toLowerCase().replace("_", " ")}
-              </p>
+              <p className="text-white/70 text-xs font-medium truncate">{user.firstName} {user.lastName}</p>
+              <p className="text-white/30 text-[10px] truncate capitalize">{user.role.toLowerCase().replace(/_/g, " ")}</p>
             </div>
           </div>
         </div>
 
-        {/* Version */}
         <div className="px-5 py-2 border-t border-white/5">
           <p className="text-white/20 text-[10px]">v2.0.0 — Wholistic Vibes Wellness</p>
         </div>
