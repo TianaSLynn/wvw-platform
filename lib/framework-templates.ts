@@ -18,7 +18,7 @@ export const FRAMEWORK_TEMPLATES: FrameworkTemplate[] = [
     id: "wvw-tpl-soc2",
     name: "SOC 2 Type II",
     description: "Trust Services Criteria covering security, availability, processing integrity, confidentiality, and privacy.",
-    type: "IT_SECURITY",
+    type: "IT",
     sections: [
       {
         title: "CC1 — Control Environment",
@@ -107,7 +107,7 @@ export const FRAMEWORK_TEMPLATES: FrameworkTemplate[] = [
     id: "wvw-tpl-iso27001",
     name: "ISO 27001",
     description: "International standard for information security management systems.",
-    type: "IT_SECURITY",
+    type: "IT",
     sections: [
       {
         title: "A.5 — Information Security Policies",
@@ -570,7 +570,7 @@ export const FRAMEWORK_TEMPLATES: FrameworkTemplate[] = [
     id: "wvw-tpl-itgc",
     name: "IT General Controls",
     description: "ITGC covering access management, change management, operations, and DR/BCP.",
-    type: "IT_SECURITY",
+    type: "IT",
     sections: [
       {
         title: "User Access Management",
