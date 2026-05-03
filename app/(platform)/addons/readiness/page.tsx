@@ -42,15 +42,9 @@ export default async function ReadinessEnginePage() {
     take: 8,
   });
 
-  // Simulate readiness scores from healthScore or random spread
   const clientReadiness = clients.map((c) => ({
     ...c,
-    overall: c.healthScore ?? Math.floor(Math.random() * 40 + 50),
-    domains: READINESS_DOMAINS.map((d) => ({
-      ...d,
-      score: Math.floor(Math.random() * 40 + 50),
-    })),
-    certification: ["SOC 2", "ISO 27001", "HIPAA", "PCI-DSS"][Math.floor(Math.random() * 4)],
+    overall: c.healthScore ?? 0,
   }));
 
   const avgReadiness = clientReadiness.length > 0
@@ -115,10 +109,7 @@ export default async function ReadinessEnginePage() {
                   <Building2 size={12} className="text-gold" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="text-sm font-medium truncate">{c.name}</p>
-                    <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.certification}</span>
-                  </div>
+                  <p className="text-sm font-medium truncate mb-1">{c.name}</p>
                   <ReadinessScore score={c.overall} />
                 </div>
                 <ChevronRight size={13} className="text-muted-foreground group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
