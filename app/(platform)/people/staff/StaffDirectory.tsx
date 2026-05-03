@@ -7,14 +7,14 @@ import { Users, Search, ChevronLeft, Star, BadgeCheck, Mail, Phone, Pencil } fro
 import Link from "next/link";
 
 const ROLE_BADGE: Record<string, string> = {
-  SUPER_ADMIN: "bg-red-50 text-red-600 border-red-200",
-  ADMIN:       "bg-orange-50 text-orange-600 border-orange-200",
-  PARTNER:     "bg-gold/10 text-amber-700 border-gold/30",
-  MANAGER:     "bg-blue-50 text-blue-600 border-blue-200",
-  SENIOR_STAFF:"bg-purple-50 text-purple-600 border-purple-200",
-  STAFF:       "bg-gray-50 text-gray-600 border-gray-200",
-  VIEWER:      "bg-gray-50 text-gray-500 border-gray-200",
-  CONSULTANT:  "bg-gray-50 text-gray-500 border-gray-200",
+  SUPER_ADMIN:  "bg-red-50 text-red-600 border-red-200",
+  ADMIN:        "bg-orange-50 text-orange-600 border-orange-200",
+  PARTNER:      "bg-gold/10 text-amber-700 border-gold/30",
+  MANAGER:      "bg-blue-50 text-blue-600 border-blue-200",
+  AUDITOR:      "bg-purple-50 text-purple-600 border-purple-200",
+  CONSULTANT:   "bg-gray-50 text-gray-600 border-gray-200",
+  CLIENT_ADMIN: "bg-teal-50 text-teal-600 border-teal-200",
+  CLIENT_USER:  "bg-gray-50 text-gray-500 border-gray-200",
 };
 
 const PROF_LABEL = ["", "Beginner", "Basic", "Proficient", "Advanced", "Expert"];
