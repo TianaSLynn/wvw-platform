@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { BookOpen, Plus, Tag, Layers, BarChart3, ArrowRight, Globe } from "lucide-react";
+import { BookOpen, Plus, Tag, Layers, BarChart3, ArrowRight, Globe, Pencil } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -131,13 +131,23 @@ export default async function AuditCatalogPage() {
                       </span>
                     )}
                   </div>
-                  <Link
-                    href={`/audits/new?template=${tpl.id}`}
-                    className="btn-gold w-full text-xs py-2 flex items-center justify-center gap-1.5 group-hover:gap-2 transition-all"
-                  >
-                    Launch Audit
-                    <ArrowRight size={13} />
-                  </Link>
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/audits/new?template=${tpl.id}`}
+                      className="btn-gold flex-1 text-xs py-2 flex items-center justify-center gap-1.5 group-hover:gap-2 transition-all"
+                    >
+                      Launch Audit
+                      <ArrowRight size={13} />
+                    </Link>
+                    {(user.role === "SUPER_ADMIN" || user.role === "ADMIN" || user.role === "PARTNER") && (
+                      <Link
+                        href={`/audit-catalog/${tpl.id}/edit`}
+                        className="btn-ghost px-2.5 py-2 text-xs flex items-center gap-1"
+                      >
+                        <Pencil size={12} /> Edit
+                      </Link>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -187,13 +197,21 @@ export default async function AuditCatalogPage() {
                     <span><span className="font-medium text-foreground">{tpl._count.sections}</span> sections</span>
                     <span><span className="font-medium text-foreground">{tpl._count.audits}</span>× used</span>
                   </div>
-                  <Link
-                    href={`/audits/new?template=${tpl.id}`}
-                    className="btn-primary w-full text-xs py-2 flex items-center justify-center gap-1.5"
-                  >
-                    Launch Audit
-                    <ArrowRight size={13} />
-                  </Link>
+                  <div className="flex gap-2">
+                    <Link
+                      href={`/audits/new?template=${tpl.id}`}
+                      className="btn-primary flex-1 text-xs py-2 flex items-center justify-center gap-1.5"
+                    >
+                      Launch Audit
+                      <ArrowRight size={13} />
+                    </Link>
+                    <Link
+                      href={`/audit-catalog/${tpl.id}/edit`}
+                      className="btn-ghost px-2.5 py-2 text-xs flex items-center gap-1"
+                    >
+                      <Pencil size={12} /> Edit
+                    </Link>
+                  </div>
                 </div>
               );
             })}

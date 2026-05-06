@@ -244,6 +244,7 @@ model Organization {
   cohorts       Cohort[]
   externalSignals ExternalSignal[]
   recognitions  Recognition[]
+  auditBundles  AuditBundle[]
 
   @@index([slug])
 }
@@ -759,6 +760,14 @@ model Audit {
   reportDueDate     DateTime?
   completedAt       DateTime?
 
+  // Audit Engine fields
+  isLocked      Boolean     @default(false)
+  overallScore  Float?      // 0–100 computed wellness score
+  pathwayId     String?
+  recommendedPathway Pathway? @relation("AuditRecommendedPathway", fields: [pathwayId], references: [id])
+  bundleId      String?
+  bundle        AuditBundle? @relation(fields: [bundleId], references: [id])
+
   // Token for public evidence submission
   publicToken   String?     @unique @default(cuid())
   isPublicTokenActive Boolean @default(false)
@@ -818,9 +827,12 @@ model AuditTemplate {
   isAiGenerated Boolean @default(false)
   isGlobal    Boolean  @default(false)              // true = available to all orgs
 
+  isActive    Boolean  @default(true)
+
   sections    AuditTemplateSection[]
   audits      Audit[]
   packages    ProductPackage[]
+  bundleItems AuditBundleItem[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -848,14 +860,18 @@ model AuditTemplateItem {
   sectionId   String
   section     AuditTemplateSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
-  question    String
-  guidance    String?
-  riskWeight  Float   @default(1.0)  // multiplier for risk scoring
-  isRequired  Boolean @default(true)
-  evidenceRequired Boolean @default(false)
-  sortOrder   Int     @default(0)
+  question             String
+  guidance             String?
+  riskWeight           Float    @default(1.0)
+  isRequired           Boolean  @default(true)
+  evidenceRequired     Boolean  @default(false)
+  sortOrder            Int      @default(0)
+  isActive             Boolean  @default(true)
+  questionBankItemId   String?
+  questionBankItem     QuestionBankItem? @relation(fields: [questionBankItemId], references: [id])
 
   @@index([sectionId])
+  @@index([questionBankItemId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1290,6 +1306,7 @@ model Pathway {
   updatedAt             DateTime       @updatedAt
 
   recommendations       GeneratedRecommendation[]
+  linkedAudits          Audit[]        @relation("AuditRecommendedPathway")
 
   @@index([orgId])
 }
@@ -2307,6 +2324,74 @@ model ExternalSignal {
 
   @@index([orgId])
   @@index([orgId, isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  QUESTION BANK — Central repository of reusable audit questions
+// ─────────────────────────────────────────────────────────────────────────────
+
+model QuestionBankCategory {
+  id        String             @id @default(cuid())
+  orgId     String?            // null = global WVW category
+  name      String
+  color     String             @default("#6B8F71")
+  sortOrder Int                @default(0)
+  items     QuestionBankItem[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([orgId])
+}
+
+model QuestionBankItem {
+  id            String                @id @default(cuid())
+  orgId         String?               // null = global WVW question
+  categoryId    String?
+  category      QuestionBankCategory? @relation(fields: [categoryId], references: [id])
+  question      String
+  guidance      String?
+  responseType  String                @default("yes_no") // yes_no | likert_5 | text
+  riskWeight    Float                 @default(1.0)
+  tags          String[]
+  isActive      Boolean               @default(true)
+  templateItems AuditTemplateItem[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([orgId])
+  @@index([categoryId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AUDIT BUNDLE — Group multiple templates into a named bundle
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditBundle {
+  id          String           @id @default(cuid())
+  orgId       String
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isActive    Boolean          @default(true)
+  items       AuditBundleItem[]
+  audits      Audit[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, isActive])
+}
+
+model AuditBundleItem {
+  id         String        @id @default(cuid())
+  bundleId   String
+  bundle     AuditBundle   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  templateId String
+  template   AuditTemplate @relation(fields: [templateId], references: [id])
+  sortOrder  Int           @default(0)
+
+  @@unique([bundleId, templateId])
+  @@index([bundleId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

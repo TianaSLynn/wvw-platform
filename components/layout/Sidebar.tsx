@@ -9,7 +9,7 @@ import {
   DollarSign, Settings, Briefcase, FolderOpen, FileText,
   GraduationCap, Award, TrendingUp, Receipt, BarChart2,
   Building2, MessageCircle, Calendar, Brain, Star,
-  Scale, X, Bell, Shield, Target,
+  Scale, X, Bell, Shield, Target, Library, Layers,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -39,12 +39,14 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "Clients & Audits",
     items: [
-      { to: "/clients",       icon: Users,        label: "Clients" },
-      { to: "/audits",        icon: ClipboardList, label: "Audit Registry" },
-      { to: "/audit-catalog", icon: BookOpen,      label: "Audit Catalog" },
-      { to: "/evidence",      icon: FolderOpen,    label: "Evidence Vault" },
-      { to: "/reports",       icon: FileText,      label: "Reports" },
-      { to: "/engagements",   icon: Briefcase,     label: "Engagements" },
+      { to: "/clients",        icon: Users,         label: "Clients" },
+      { to: "/audits",         icon: ClipboardList, label: "Audit Registry" },
+      { to: "/audit-catalog",  icon: BookOpen,      label: "Audit Catalog" },
+      { to: "/audit-bundles",  icon: Layers,        label: "Audit Bundles" },
+      { to: "/question-bank",  icon: Library,       label: "Question Bank" },
+      { to: "/evidence",       icon: FolderOpen,    label: "Evidence Vault" },
+      { to: "/reports",        icon: FileText,      label: "Reports" },
+      { to: "/engagements",    icon: Briefcase,     label: "Engagements" },
     ],
   },
   {

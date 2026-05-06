@@ -58,6 +58,15 @@ const config: Config = {
           800: "#222c25",
           900: "#111815",
         },
+        // WVW Intelligence Audit Engine™ brand colors
+        obsidian:   "#1A1A1B",
+        alabaster:  "#F5F5F0",
+        "sage-slate": "#708090",
+        terracotta: {
+          DEFAULT: "#A0522D",
+          light:   "#C4784A",
+          dark:    "#7A3D21",
+        },
         risk: {
           strong:    "#22c55e",
           stable:    "#f59e0b",

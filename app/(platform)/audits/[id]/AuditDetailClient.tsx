@@ -13,6 +13,7 @@ import {
   Upload, Link2, StickyNote, X, Download, Cloud,
 } from "lucide-react";
 import { MS365FilePicker } from "@/components/ui/MS365FilePicker";
+import { ScoreRing, DomainBarChart, ScoreSummary } from "@/components/ui/ScoringCharts";
 
 type ChecklistItem = {
   id: string; question: string; guidance: string | null;
@@ -1152,82 +1153,60 @@ function ResultsTab({ auditId }: { auditId: string }) {
     );
   }
 
-  const bandCfg = BAND_CONFIG[data.riskBand] ?? BAND_CONFIG.AT_RISK!;
-
   return (
     <div className="space-y-6 max-w-3xl">
-      {/* Overall score card */}
-      <div className={cn("section-card p-6 border-2", bandCfg.color)}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide opacity-70 mb-1">Overall Health Score</p>
-            <div className="flex items-end gap-3">
-              <span className="text-5xl font-bold">{data.overallScore}</span>
-              <span className="text-lg font-medium opacity-60 mb-1">/100</span>
-            </div>
-            <div className="mt-2">
-              <RiskBandPill band={data.riskBand} />
-            </div>
+      {/* Score ring + summary stats */}
+      <div className="section-card p-6">
+        <div className="flex items-center gap-8">
+          <ScoreRing score={data.overallScore} riskBand={data.riskBand} size={190} />
+          <div className="flex-1 space-y-4">
+            <ScoreSummary
+              responseCount={data.responseCount}
+              questionCount={data.questionCount}
+              flagCount={data.patternFlags.length}
+              domainCount={data.domainResults.length}
+            />
+            <button
+              type="button"
+              onClick={compute}
+              disabled={computing}
+              className="btn-ghost text-xs flex items-center gap-1"
+            >
+              <TrendingUp size={11} /> {computing ? "Recomputing…" : "Recompute Scores"}
+            </button>
           </div>
-          <div className="text-right text-xs opacity-70 space-y-1">
-            <p><strong>{data.responseCount}</strong> respondents</p>
-            <p><strong>{data.questionCount}</strong> questions scored</p>
-          </div>
-        </div>
-        <div className="mt-4 h-2.5 bg-black/10 rounded-full overflow-hidden">
-          <div
-            className={cn("h-full rounded-full transition-all", bandCfg.bar)}
-            style={{ width: `${data.overallScore}%` }}
-          />
-        </div>
-        <div className="flex justify-end mt-2">
-          <button
-            onClick={compute}
-            disabled={computing}
-            className="text-xs opacity-60 hover:opacity-100 transition-opacity flex items-center gap-1"
-          >
-            <TrendingUp size={11} /> {computing ? "Recomputing…" : "Recompute"}
-          </button>
         </div>
       </div>
 
-      {/* Domain breakdown */}
+      {/* Domain bar chart */}
       {data.domainResults.length > 0 && (
         <div className="section-card">
           <div className="section-card-header">
             <h3 className="text-sm font-semibold">Domain Breakdown</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Score by audit section</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Score by audit section — lower scores indicate greater risk</p>
           </div>
-          <div className="divide-y divide-border">
-            {data.domainResults.map((d) => {
-              const dcfg = BAND_CONFIG[d.riskBand] ?? BAND_CONFIG.AT_RISK!;
-              return (
-                <div key={d.sectionId} className="px-5 py-4">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <p className="text-sm font-medium text-foreground">{d.sectionTitle}</p>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-sm font-bold">{d.score}/100</span>
-                      <RiskBandPill band={d.riskBand} />
+          <div className="px-4 py-4">
+            <DomainBarChart domains={data.domainResults} />
+          </div>
+          <div className="divide-y divide-border border-t border-border">
+            {data.domainResults.map((d) => (
+              <div key={d.sectionId} className="px-5 py-3 flex items-center justify-between gap-4">
+                <p className="text-xs font-medium text-foreground flex-1">{d.sectionTitle}</p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
+                  <span>{d.answeredCount}/{d.questionCount} answered</span>
+                  <RiskBandPill band={d.riskBand} />
+                  {d.flaggedRiskTags.length > 0 && (
+                    <div className="flex gap-1">
+                      {d.flaggedRiskTags.slice(0, 2).map((tag) => (
+                        <span key={tag} className="bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded-full text-[10px]">
+                          {tag.replace(/-/g, " ")}
+                        </span>
+                      ))}
                     </div>
-                  </div>
-                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mb-1.5">
-                    <div className={cn("h-full rounded-full", dcfg.bar)} style={{ width: `${d.score}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>{d.answeredCount}/{d.questionCount} answered</span>
-                    {d.flaggedRiskTags.length > 0 && (
-                      <div className="flex gap-1 flex-wrap justify-end">
-                        {d.flaggedRiskTags.map((tag) => (
-                          <span key={tag} className="bg-red-50 text-red-600 border border-red-100 px-1.5 py-0.5 rounded-full">
-                            {tag.replace(/-/g, " ")}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       )}
