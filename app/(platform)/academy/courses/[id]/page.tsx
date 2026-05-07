@@ -3,7 +3,8 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { BookOpen, Users, Clock, CheckCircle2, BarChart2, ExternalLink, Tag } from "lucide-react";
+import { BookOpen, Users, Clock, CheckCircle2, BarChart2, ExternalLink, Tag, Pencil } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { AssignEmployeesButton, UpdateStatusButton } from "./CourseDetailActions";
 
@@ -80,6 +81,11 @@ export default async function CourseDetailPage({ params }: Props) {
               <a href={course.contentUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost flex items-center gap-2 text-sm">
                 <ExternalLink size={14} /> Open Content
               </a>
+            )}
+            {["SUPER_ADMIN", "ADMIN", "PARTNER", "MANAGER"].includes(user.role) && (
+              <Link href={`/academy/courses/${course.id}/builder`} className="btn-ghost flex items-center gap-2 text-sm">
+                <Pencil size={14} /> Build Content
+              </Link>
             )}
             <AssignEmployeesButton courseId={course.id} employees={employees} assignedIds={assignedIds} />
           </div>

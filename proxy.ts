@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 // Routes that are publicly accessible without authentication
 const isPublicRoute = createRouteMatcher([
+  "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks/clerk(.*)",
@@ -14,6 +15,9 @@ const isPublicRoute = createRouteMatcher([
   "/portal/(.*)",
   "/survey/(.*)",
   "/api/survey/(.*)",
+  // Invite acceptance
+  "/invite/(.*)",
+  "/api/invites/(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

@@ -9,7 +9,7 @@ import {
   DollarSign, Settings, Briefcase, FolderOpen, FileText,
   GraduationCap, Award, TrendingUp, Receipt, BarChart2,
   Building2, MessageCircle, Calendar, Brain, Star,
-  Scale, X, Bell, Shield, Target, Library, Layers,
+  Scale, X, Bell, Shield, Target, Library, Layers, Mail,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -97,8 +97,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "System",
     items: [
-      { to: "/notifications",       icon: Bell,     label: "Notifications" },
-      { to: "/settings/team",       icon: Users,    label: "Team Members" },
+      { to: "/notifications",         icon: Bell,      label: "Notifications" },
+      { to: "/settings/team",         icon: Users,     label: "Team Members" },
+      { to: "/settings/invites",      icon: Mail,      label: "Invitations" },
       { to: "/settings/organization", icon: Building2, label: "Org Settings" },
       { to: "/settings/integrations", icon: Settings,  label: "Integrations" },
     ],

@@ -2042,6 +2042,7 @@ model Course {
   updatedAt    DateTime      @updatedAt
 
   assignments  CourseAssignment[]
+  courseModules CourseModule[]
 
   @@unique([orgId, slug])
   @@index([orgId, category])
@@ -2416,4 +2417,67 @@ model Recognition {
 
   @@index([orgId])
   @@index([orgId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COURSE MODULE — in-platform training content builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CourseModule {
+  id          String         @id @default(cuid())
+  courseId    String
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  content     String?        @db.Text  // Markdown / rich text
+  videoUrl    String?                  // YouTube / Loom / Vimeo embed URL
+  moduleType  String         @default("text") // text | video | quiz | document
+  sortOrder   Int            @default(0)
+  isPublished Boolean        @default(true)
+  durationMin Int?                     // estimated minutes
+
+  questions   CourseQuestion[]
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([courseId])
+}
+
+model CourseQuestion {
+  id         String       @id @default(cuid())
+  moduleId   String
+  module     CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  question   String
+  options    String[]     // answer choices
+  answer     String       // correct option (exact text match)
+  explanation String?     // shown after answer
+
+  sortOrder  Int          @default(0)
+
+  @@index([moduleId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INVITE — generic invite token for employees and clients
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Invite {
+  id          String   @id @default(cuid())
+  orgId       String
+  token       String   @unique @default(cuid())
+  email       String?                // pre-fill email on sign-up
+  role        String   @default("CLIENT_USER") // UserRole value
+  inviteType  String   @default("team")        // team | client | employee
+  clientId    String?                // if inviting a client contact
+  message     String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId])
+  @@index([token])
 }
