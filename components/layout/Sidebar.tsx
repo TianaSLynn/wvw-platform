@@ -62,7 +62,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "People & HR",
     items: [
+      { to: "/people/hris",    icon: Users,     label: "HRIS Activity Hub" },
       { to: "/workforce",      icon: Building2, label: "Workforce / HRIS" },
+      { to: "/workforce/onboarding", icon: ClipboardList, label: "Onboarding" },
       { to: "/people",         icon: Users,     label: "People & Culture" },
       { to: "/jobs",           icon: Briefcase, label: "Jobs & Hiring" },
       { to: "/people/time",    icon: BarChart2, label: "Time Tracking" },

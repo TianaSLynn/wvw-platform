@@ -2,6 +2,7 @@ import { ok, created, unauthorized, badRequest, serverError } from "@/lib/api-re
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { postAnnouncement } from "@/lib/announcements";
+import { NEW_HIRE_STEPS } from "@/lib/onboarding-templates";
 import { z } from "zod";
 
 const createSchema = z.object({
@@ -63,6 +64,31 @@ export async function POST(req: Request) {
         managerId: managerId || null,
       },
     });
+
+    // Auto-launch onboarding workflow with WVW standard steps
+    const targetDate = employee.startDate
+      ? new Date(new Date(employee.startDate).getTime() + 90 * 24 * 60 * 60 * 1000)
+      : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
+    db.onboardingWorkflow.create({
+      data: {
+        orgId:      user.orgId,
+        employeeId: employee.id,
+        type:       "ONBOARDING",
+        status:     "ACTIVE",
+        startDate:  employee.startDate ?? new Date(),
+        targetDate,
+        steps: {
+          create: NEW_HIRE_STEPS.map((step) => ({
+            title:       step.title,
+            description: step.description,
+            category:    step.category,
+            sortOrder:   step.sortOrder,
+            status:      "PENDING" as const,
+          })),
+        },
+      },
+    }).catch(() => {});
 
     // Auto-announce new hire / onboarding
     const fullName = `${employee.firstName} ${employee.lastName}`;

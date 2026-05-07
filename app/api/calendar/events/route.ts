@@ -20,7 +20,7 @@ export async function GET(req: Request) {
       ? new Date(searchParams.get("to")!)
       : new Date(new Date().setDate(new Date().getDate() + 90)); // 90 days ahead
 
-    const [meetings, applications, employees, audits, milestones, tasks, invoices] =
+    const [meetings, applications, employees, audits, milestones, tasks, invoices, allEmployeesWithAnniversary, newClients, onboardingSteps] =
       await Promise.all([
         // Scheduled meetings
         db.meeting.findMany({
@@ -97,6 +97,34 @@ export async function GET(req: Request) {
           include: { client: { select: { name: true } } },
           orderBy: { dueDate: "asc" },
           take: 30,
+        }),
+
+        // All employees with a startDate (for anniversary computation)
+        db.employee.findMany({
+          where: { orgId: user.orgId, startDate: { not: null }, employmentStatus: { not: "TERMINATED" } },
+          select: { id: true, firstName: true, lastName: true, title: true, startDate: true },
+        }),
+
+        // New clients onboarded in the window
+        db.client.findMany({
+          where: { orgId: user.orgId, onboardedAt: { gte: from, lte: to }, deletedAt: null },
+          orderBy: { onboardedAt: "asc" },
+        }),
+
+        // Onboarding step due dates (pending steps)
+        db.onboardingStep.findMany({
+          where: {
+            workflow: { orgId: user.orgId, status: "ACTIVE" },
+            status: "PENDING",
+            dueDate: { gte: from, lte: to },
+          },
+          include: {
+            workflow: {
+              include: { employee: { select: { firstName: true, lastName: true } } },
+            },
+          },
+          orderBy: { dueDate: "asc" },
+          take: 50,
         }),
       ]);
 
@@ -203,6 +231,55 @@ export async function GET(req: Request) {
         meta: `$${inv.total.toLocaleString()}`,
         link: `/invoices/${inv.id}`,
       })),
+
+      // Work anniversaries — employees whose startDate month/day falls within the window
+      ...(() => {
+        const out: EventPayload[] = [];
+        const windowYear = from.getFullYear();
+        for (const emp of allEmployeesWithAnniversary) {
+          if (!emp.startDate) continue;
+          const sd = new Date(emp.startDate);
+          for (const yr of [windowYear, windowYear + 1]) {
+            const anniversary = new Date(yr, sd.getMonth(), sd.getDate());
+            if (anniversary >= from && anniversary <= to) {
+              const years = yr - sd.getFullYear();
+              if (years > 0) {
+                out.push({
+                  id: `anniversary-${emp.id}-${yr}`,
+                  title: `${emp.firstName} ${emp.lastName} — ${years}-year Anniversary`,
+                  subtitle: emp.title ?? "Team member",
+                  date: anniversary,
+                  type: "onboarding",
+                  meta: `${years} yr${years !== 1 ? "s" : ""}`,
+                  link: `/workforce`,
+                });
+              }
+            }
+          }
+        }
+        return out;
+      })(),
+
+      ...newClients.map((c) => ({
+        id: `client-start-${c.id}`,
+        title: `${c.name} — Client Onboards`,
+        subtitle: c.industry ?? "New client",
+        date: c.onboardedAt as Date,
+        type: "onboarding" as const,
+        link: `/clients/${c.id}`,
+      })),
+
+      ...onboardingSteps
+        .filter((s) => s.dueDate != null)
+        .map((s) => ({
+          id: `step-${s.id}`,
+          title: s.title,
+          subtitle: `Onboarding: ${s.workflow.employee.firstName} ${s.workflow.employee.lastName}`,
+          date: s.dueDate as Date,
+          type: "task" as const,
+          meta: s.category,
+          link: `/workforce/onboarding`,
+        })),
     ];
 
     events.sort((a, b) => a.date.getTime() - b.date.getTime());

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { ok, noContent, unauthorized, notFound, badRequest, serverError } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth";
 import { postAnnouncement } from "@/lib/announcements";
+import { ROLE_CHANGE_STEPS } from "@/lib/onboarding-templates";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -98,6 +99,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           subjectId:   id,
         }).catch(() => {});
       }
+    }
+
+    // Auto-launch role-change workflow on title/department change
+    const titleChanged = parsed.data.title && parsed.data.title !== existing.title && existing.title;
+    const deptChanged  = parsed.data.department && parsed.data.department !== existing.department && existing.department;
+    if (titleChanged || deptChanged) {
+      db.onboardingWorkflow.create({
+        data: {
+          orgId:      user.orgId,
+          employeeId: id,
+          type:       "ONBOARDING",
+          status:     "ACTIVE",
+          targetDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          notes:      `Role transition: ${existing.title ?? existing.department} → ${updated.title ?? updated.department}`,
+          steps: {
+            create: ROLE_CHANGE_STEPS.map((step) => ({
+              title:       step.title,
+              description: step.description,
+              category:    step.category,
+              sortOrder:   step.sortOrder,
+              status:      "PENDING" as const,
+            })),
+          },
+        },
+      }).catch(() => {});
     }
 
     // Auto-announce title/promotion change (fire-and-forget)

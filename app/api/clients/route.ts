@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
 
     const client = await db.client.create({
-      data: { ...parsed.data, orgId: user.orgId },
+      data: { ...parsed.data, orgId: user.orgId, onboardedAt: new Date() },
     });
 
     await logActivity({
