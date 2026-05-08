@@ -157,7 +157,7 @@ export default function JobsPage() {
   async function load() {
     setLoading(true);
     const res = await fetch("/api/jobs");
-    if (res.ok) setPostings(await res.json());
+    if (res.ok) setPostings((await res.json()).data);
     setLoading(false);
   }
 

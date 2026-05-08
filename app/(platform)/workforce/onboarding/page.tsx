@@ -91,8 +91,8 @@ export default function OnboardingWorkflowPage() {
         fetch(`/api/onboarding${typeFilter !== "all" ? `?type=${typeFilter}` : ""}`),
         fetch("/api/workforce"),
       ]);
-      if (wRes.ok) setWorkflows(await wRes.json());
-      if (eRes.ok) setEmployees(await eRes.json());
+      if (wRes.ok) setWorkflows((await wRes.json()).data);
+      if (eRes.ok) setEmployees((await eRes.json()).data);
     } finally { setLoading(false); }
   }, [typeFilter]);
 
@@ -116,7 +116,7 @@ export default function OnboardingWorkflowPage() {
         }),
       });
       if (res.ok) {
-        const wf = await res.json() as Workflow;
+        const { data: wf } = await res.json() as { data: Workflow };
         setCreating(false);
         await load();
         setActiveId(wf.id);

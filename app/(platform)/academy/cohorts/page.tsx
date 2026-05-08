@@ -72,7 +72,7 @@ export default function CohortsPage() {
     try {
       const res = await fetch("/api/cohorts");
       if (res.ok) {
-        const data = await res.json();
+        const { data } = await res.json();
         // API returns `members` (completed filter) — map to `completedMembers` for type safety
         setCohorts(data.map((c: Cohort & { members: { id: string }[] }) => ({ ...c, completedMembers: c.members })));
       }
@@ -82,7 +82,7 @@ export default function CohortsPage() {
 
   const loadExpanded = async (id: string) => {
     const res = await fetch(`/api/cohorts/${id}`);
-    if (res.ok) setExpandedCohort(await res.json());
+    if (res.ok) setExpandedCohort((await res.json()).data);
   };
 
   const filtered = useMemo(() => cohorts.filter((c) => {

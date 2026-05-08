@@ -145,7 +145,7 @@ export default function ServiceLibraryPage() {
     setLoading(true);
     try {
       const res = await fetch(`/api/services?active=${showInactive ? "false" : "true"}`);
-      if (res.ok) setServices(await res.json());
+      if (res.ok) setServices((await res.json()).data);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [showInactive]); // eslint-disable-line

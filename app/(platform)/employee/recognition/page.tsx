@@ -38,7 +38,7 @@ export default function RecognitionPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/recognition");
-      if (res.ok) setRecognitions(await res.json());
+      if (res.ok) setRecognitions((await res.json()).data);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []); // eslint-disable-line

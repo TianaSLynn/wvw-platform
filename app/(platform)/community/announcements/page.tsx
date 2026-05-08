@@ -157,7 +157,7 @@ export default function AnnouncementsPage() {
     setLoading(true);
     const url = `/api/announcements${type && type !== "ALL" ? `?type=${type}` : ""}`;
     const res = await fetch(url);
-    if (res.ok) setPosts(await res.json());
+    if (res.ok) setPosts((await res.json()).data);
     setLoading(false);
   }
 

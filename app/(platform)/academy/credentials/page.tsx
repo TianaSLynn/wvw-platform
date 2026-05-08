@@ -51,7 +51,7 @@ export default function CredentialsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/credentials");
-      if (res.ok) setCredentials(await res.json());
+      if (res.ok) setCredentials((await res.json()).data);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []); // eslint-disable-line

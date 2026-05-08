@@ -68,7 +68,7 @@ export default function GrantsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/grants");
-      if (res.ok) setGrants(await res.json());
+      if (res.ok) setGrants((await res.json()).data);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []); // eslint-disable-line

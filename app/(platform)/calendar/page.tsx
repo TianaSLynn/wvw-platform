@@ -114,7 +114,7 @@ export default function UnifiedCalendarPage() {
       try {
         const res = await fetch("/api/calendar/events");
         if (res.ok) {
-          const data = await res.json();
+          const { data } = await res.json();
           setEvents(
             (data.events as Array<UnifiedEvent & { date: string }>).map((e) => ({
               ...e,
