@@ -21,13 +21,17 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    // Protect all non-public routes
-    await auth.protect();
-  }
-
   const { userId } = await auth();
   const url = req.nextUrl;
+
+  if (!isPublicRoute(req) && !userId) {
+    // Manual redirect instead of auth.protect() to avoid Clerk's
+    // "protect-rewrite" behavior which sends unauthenticated users to /404
+    // when using a dev publishable key without the dev-browser cookie.
+    const signIn = new URL("/sign-in", req.url);
+    signIn.searchParams.set("redirect_url", url.pathname);
+    return NextResponse.redirect(signIn);
+  }
 
   // If authenticated user hits root, redirect to dashboard
   if (userId && url.pathname === "/") {
