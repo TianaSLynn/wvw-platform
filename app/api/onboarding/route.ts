@@ -61,8 +61,8 @@ const OFFBOARDING_TEMPLATE = [
 const createSchema = z.object({
   employeeId: z.string(),
   type:       z.enum(["ONBOARDING", "OFFBOARDING"]),
-  targetDate: z.string().optional(),
-  notes:      z.string().optional(),
+  targetDate: z.string().nullish(),
+  notes:      z.string().nullish(),
   useTemplate: z.boolean().default(true),
 });
 

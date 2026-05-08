@@ -82,6 +82,7 @@ export default function OnboardingWorkflowPage() {
   const [creating, setCreating]   = useState(false);
   const [createForm, setCreateForm] = useState({ employeeId: "", type: "ONBOARDING" as WorkflowType, targetDate: "", notes: "", useTemplate: true });
   const [saving, setSaving]       = useState(false);
+  const [createError, setCreateError] = useState("");
   const [updatingStep, setUpdatingStep] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -103,6 +104,7 @@ export default function OnboardingWorkflowPage() {
   async function handleCreate() {
     if (!createForm.employeeId) return;
     setSaving(true);
+    setCreateError("");
     try {
       const res = await fetch("/api/onboarding", {
         method: "POST",
@@ -118,8 +120,12 @@ export default function OnboardingWorkflowPage() {
       if (res.ok) {
         const { data: wf } = await res.json() as { data: Workflow };
         setCreating(false);
+        setCreateError("");
         await load();
         setActiveId(wf.id);
+      } else {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        setCreateError(d.error ?? "Failed to create workflow. Please try again.");
       }
     } finally { setSaving(false); }
   }
@@ -441,8 +447,11 @@ export default function OnboardingWorkflowPage() {
                 </span>
               </label>
             </div>
+            {createError && (
+              <div className="mx-6 mb-0 -mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-600">{createError}</div>
+            )}
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-border">
-              <button type="button" onClick={() => setCreating(false)} className="btn-ghost px-4 py-2 text-sm rounded-lg border border-border">Cancel</button>
+              <button type="button" onClick={() => { setCreating(false); setCreateError(""); }} className="btn-ghost px-4 py-2 text-sm rounded-lg border border-border">Cancel</button>
               <button type="button" onClick={handleCreate} disabled={saving || !createForm.employeeId} className="btn-primary px-4 py-2 text-sm flex items-center gap-1.5">
                 {saving ? <><Loader2 size={13} className="animate-spin" /> Creating…</> : <><Plus size={13} /> Start Workflow</>}
               </button>

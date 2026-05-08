@@ -51,8 +51,8 @@ export const projectSchema = z.object({
 
 export const auditSchema = z.object({
   clientId:     z.string().cuid(),
-  projectId:    z.string().cuid().optional(),
-  templateId:   z.string().cuid().optional(),
+  projectId:    z.string().cuid().optional().or(z.literal("")).transform(v => v || undefined),
+  templateId:   z.string().cuid().optional().or(z.literal("")).transform(v => v || undefined),
   name:         z.string().min(2).max(200),
   code:         z.string().optional(),
   description:  z.string().optional(),
@@ -60,10 +60,10 @@ export const auditSchema = z.object({
   status:       z.enum(["DRAFT","PLANNING","FIELDWORK","REVIEW","REPORTING","COMPLETED","ARCHIVED"]).optional(),
   scope:        z.string().optional(),
   objectives:   z.array(z.string()).default([]),
-  planningStartDate:  z.string().optional(),
-  fieldworkStartDate: z.string().optional(),
-  fieldworkEndDate:   z.string().optional(),
-  reportDueDate:      z.string().optional(),
+  planningStartDate:  z.string().optional().or(z.literal("")).transform(v => v || undefined),
+  fieldworkStartDate: z.string().optional().or(z.literal("")).transform(v => v || undefined),
+  fieldworkEndDate:   z.string().optional().or(z.literal("")).transform(v => v || undefined),
+  reportDueDate:      z.string().optional().or(z.literal("")).transform(v => v || undefined),
   tags:         z.array(z.string()).default([]),
 });
 
