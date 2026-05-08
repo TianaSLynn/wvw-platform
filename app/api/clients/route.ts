@@ -34,6 +34,7 @@ export async function GET(req: Request) {
         _count: { select: { projects: true, audits: true } },
       },
       orderBy: { name: "asc" },
+      take: 500,
     });
 
     return ok(clients);

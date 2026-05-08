@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { ok, noContent, unauthorized, notFound, serverError, badRequest } from "@/lib/api-response";
+import { ok, noContent, unauthorized, notFound, serverError, badRequest, forbidden
+} from "@/lib/api-response";
 import { logActivity } from "@/lib/activity";
 import { projectSchema } from "@/lib/validations";
 import { getCurrentUser } from "@/lib/auth";
@@ -66,6 +67,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
+    if (!["SUPER_ADMIN", "ADMIN", "PARTNER", "MANAGER"].includes(user.role)) return forbidden("Insufficient permissions");
     const { id } = await params;
 
     const existing = await db.project.findFirst({ where: { id, orgId: user.orgId } });

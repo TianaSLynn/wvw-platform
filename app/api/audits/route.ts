@@ -32,6 +32,7 @@ export async function GET(req: Request) {
         _count: { select: { findings: true, evidence: true, sections: true } },
       },
       orderBy: { updatedAt: "desc" },
+      take: 500,
     });
 
     return ok(audits);

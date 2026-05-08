@@ -32,6 +32,7 @@ export async function GET(_req: Request) {
         _count: { select: { activities: true } },
       },
       orderBy: [{ stage: "asc" }, { updatedAt: "desc" }],
+      take: 500,
     });
     return ok(opportunities);
   } catch (e) { return serverError(e); }

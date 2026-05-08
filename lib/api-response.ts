@@ -35,6 +35,13 @@ export function conflict(message: string) {
   return NextResponse.json({ error: message }, { status: 409 });
 }
 
+export function tooManyRequests(retryAfter: number) {
+  return NextResponse.json(
+    { error: "Too many requests" },
+    { status: 429, headers: { "Retry-After": String(retryAfter) } }
+  );
+}
+
 export function serverError(error: unknown) {
   console.error("[API Error]", error);
   const message =

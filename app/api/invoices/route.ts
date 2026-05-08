@@ -26,6 +26,7 @@ export async function GET(req: Request) {
         _count:  { select: { lineItems: true, payments: true } },
       },
       orderBy: { issueDate: "desc" },
+      take: 500,
     });
 
     return ok(invoices);

@@ -38,6 +38,25 @@ export async function POST(req: Request) {
       // Check file size (50MB max)
       if (file.size > 50 * 1024 * 1024) return badRequest("File exceeds 50MB limit");
 
+      // MIME type allowlist — reject executable/scriptable formats
+      const ALLOWED_TYPES = new Set([
+        "application/pdf",
+        "image/jpeg", "image/png", "image/webp", "image/gif", "image/tiff",
+        "text/plain", "text/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip", "application/x-zip-compressed",
+        "video/mp4", "video/webm",
+        "audio/mpeg", "audio/wav",
+      ]);
+      if (!ALLOWED_TYPES.has(file.type)) {
+        return badRequest(`File type "${file.type}" is not allowed`);
+      }
+
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 

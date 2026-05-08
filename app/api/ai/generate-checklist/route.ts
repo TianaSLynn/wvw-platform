@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
-import { unauthorized, serverError, badRequest } from "@/lib/api-response";
+import { unauthorized, serverError, badRequest, tooManyRequests } from "@/lib/api-response";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 
@@ -17,6 +18,9 @@ export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
+
+    const rl = rateLimit(rateLimitKey("ai:checklist", user.id), 10, 60_000);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
 
     const body = await req.json();
     const parsed = schema.safeParse(body);

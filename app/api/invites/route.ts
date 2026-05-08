@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { ok, created, unauthorized, badRequest, serverError } from "@/lib/api-response";
+import { ok, created, unauthorized, badRequest, serverError, tooManyRequests } from "@/lib/api-response";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 
@@ -32,6 +33,9 @@ export async function POST(req: Request) {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
     if (!["SUPER_ADMIN", "ADMIN", "PARTNER"].includes(user.role)) return unauthorized();
+
+    const rl = rateLimit(rateLimitKey("invite:create", user.id), 10, 3_600_000);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
 
     const body   = await req.json();
     const parsed = createSchema.safeParse(body);

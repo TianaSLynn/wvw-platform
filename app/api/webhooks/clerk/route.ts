@@ -15,6 +15,7 @@
  * is only strictly required for user.deleted events.
  */
 
+import { timingSafeEqual } from "crypto";
 import { provisionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -37,14 +38,22 @@ function unauthorized() {
 }
 
 export async function POST(req: Request) {
-  // Verify bearer token — set CLERK_WORKFLOW_SECRET in Clerk Dashboard Workflow header
+  // Verify bearer token — CLERK_WORKFLOW_SECRET must be set; never allow unauthenticated access
   const secret = process.env.CLERK_WORKFLOW_SECRET ?? process.env.CLERK_WEBHOOK_SECRET;
-  if (secret) {
-    const authHeader = req.headers.get("authorization") ?? "";
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-    if (token !== secret) return unauthorized();
+  if (!secret) return unauthorized(); // hard fail — always require a secret in production
+
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+
+  // Use timing-safe comparison to prevent timing attacks
+  try {
+    const secretBuf = Buffer.from(secret);
+    const tokenBuf  = Buffer.alloc(secretBuf.length);
+    Buffer.from(token).copy(tokenBuf);
+    if (!timingSafeEqual(tokenBuf, secretBuf)) return unauthorized();
+  } catch {
+    return unauthorized();
   }
-  // If no secret is configured, allow the request (dev mode)
 
   let event: ClerkUserEvent;
   try {

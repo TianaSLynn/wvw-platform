@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
-import { unauthorized } from "@/lib/api-response";
+import { unauthorized, tooManyRequests } from "@/lib/api-response";
+import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
 
@@ -9,6 +10,9 @@ export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
+
+    const rl = rateLimit(rateLimitKey("ai:chat", user.id), 30, 60_000);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
 
     const { messages, context } = await req.json();
 

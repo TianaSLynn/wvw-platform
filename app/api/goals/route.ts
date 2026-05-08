@@ -27,6 +27,7 @@ export async function GET() {
       where: { orgId: user.orgId, status: { not: "ARCHIVED" } },
       include: { keyResults: true },
       orderBy: [{ status: "asc" }, { quarter: "desc" }, { createdAt: "desc" }],
+      take: 500,
     });
 
     return ok(goals);

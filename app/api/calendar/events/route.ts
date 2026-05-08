@@ -30,6 +30,7 @@ export async function GET(req: Request) {
           },
           include: { client: { select: { name: true } } },
           orderBy: { scheduledAt: "asc" },
+          take: 200,
         }),
 
         // Job applications with scheduled interviews
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
           },
           include: { posting: { select: { title: true } } },
           orderBy: { interviewAt: "asc" },
+          take: 100,
         }),
 
         // Employee onboarding start dates
@@ -49,6 +51,7 @@ export async function GET(req: Request) {
             startDate: { gte: from, lte: to },
           },
           orderBy: { startDate: "asc" },
+          take: 100,
         }),
 
         // Audit fieldwork dates
@@ -62,6 +65,7 @@ export async function GET(req: Request) {
           },
           include: { client: { select: { name: true } } },
           orderBy: { fieldworkStartDate: "asc" },
+          take: 100,
         }),
 
         // Project milestones
@@ -73,6 +77,7 @@ export async function GET(req: Request) {
           },
           include: { project: { select: { name: true, client: { select: { name: true } } } } },
           orderBy: { dueDate: "asc" },
+          take: 200,
         }),
 
         // Tasks with due dates (assigned to anyone in the org)
@@ -103,12 +108,14 @@ export async function GET(req: Request) {
         db.employee.findMany({
           where: { orgId: user.orgId, startDate: { not: null }, employmentStatus: { not: "TERMINATED" } },
           select: { id: true, firstName: true, lastName: true, title: true, startDate: true },
+          take: 500,
         }),
 
         // New clients onboarded in the window
         db.client.findMany({
           where: { orgId: user.orgId, onboardedAt: { gte: from, lte: to }, deletedAt: null },
           orderBy: { onboardedAt: "asc" },
+          take: 100,
         }),
 
         // Onboarding step due dates (pending steps)

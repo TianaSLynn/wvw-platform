@@ -38,6 +38,7 @@ export async function GET(req: Request) {
         assignedTo: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
       },
       orderBy: [{ status: "asc" }, { deadline: "asc" }],
+      take: 500,
     });
 
     return ok(grants);

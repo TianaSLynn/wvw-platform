@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
-import { ok, unauthorized, badRequest, notFound, serverError } from "@/lib/api-response";
+import { ok, unauthorized, badRequest, notFound, serverError, forbidden
+} from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 
@@ -52,6 +53,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     const user = await getCurrentUser();
     if (!user) return unauthorized();
+    if (!["SUPER_ADMIN", "ADMIN", "PARTNER", "MANAGER"].includes(user.role)) return forbidden("Insufficient permissions");
 
     const { id } = await params;
     const bundle = await db.auditBundle.findFirst({ where: { id, orgId: user.orgId } });
