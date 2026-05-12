@@ -63,7 +63,7 @@ export function ClearDemoDataButton() {
         body: JSON.stringify({ target, confirm: true }),
       });
       if (res.ok) {
-        const data = await res.json();
+        const { data } = await res.json();
         const d = data.deleted as Record<string, number>;
         setDone(`Cleared: ${Object.entries(d).map(([k, v]) => `${v} ${k}`).join(", ")}`);
         router.refresh();

@@ -59,10 +59,10 @@ export default function JobApplicationsPage() {
       fetch(`/api/jobs/${postingId}/applications`),
       fetch("/api/org"),
     ]);
-    if (pRes.ok) setPosting(await pRes.json());
-    if (aRes.ok) setApps(await aRes.json());
+    if (pRes.ok) setPosting((await pRes.json()).data);
+    if (aRes.ok) setApps((await aRes.json()).data);
     if (orgRes.ok) {
-      const org = await orgRes.json();
+      const { data: org } = await orgRes.json();
       const settings = (org?.settings && typeof org.settings === "object" ? org.settings : {}) as Record<string, unknown>;
       setBookingUrl((settings.interviewBookingUrl as string) ?? "");
     }
@@ -93,7 +93,7 @@ export default function JobApplicationsPage() {
         body: JSON.stringify({ applicationId, ...patch }),
       });
       if (res.ok) {
-        const updated = await res.json();
+        const { data: updated } = await res.json();
         setApps((prev) => prev.map((a) => a.id === updated.id ? updated : a));
         if (active?.id === updated.id) setActive(updated);
       }

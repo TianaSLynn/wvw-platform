@@ -59,7 +59,7 @@ export default function ExternalSignalsPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/signals");
-      if (res.ok) setOrgSignals(await res.json());
+      if (res.ok) setOrgSignals((await res.json()).data);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []); // eslint-disable-line
