@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
     // Generate audit code
     const auditCount = await db.audit.count({ where: { orgId: user.orgId } });
-    const code = parsed.data.code ?? `AUD-${new Date().getFullYear()}-${String(auditCount + 1).padStart(3, "0")}`;
+    const code = parsed.data.code || `AUD-${new Date().getFullYear()}-${String(auditCount + 1).padStart(3, "0")}`;
 
     const audit = await db.audit.create({
       data: {
