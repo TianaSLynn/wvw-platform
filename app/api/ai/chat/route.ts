@@ -47,7 +47,7 @@ Be concise, specific, and actionable. Format responses clearly with bullet point
 
     // Stream the response
     const stream = await client.messages.create({
-      model: "claude-opus-4-6",
+      model: "claude-sonnet-4-6",
       max_tokens: 2048,
       system: systemPrompt,
       messages: messages.map((m: { role: string; content: string }) => ({

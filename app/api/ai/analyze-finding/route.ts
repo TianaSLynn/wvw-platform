@@ -56,7 +56,7 @@ Provide a structured analysis. Respond ONLY with valid JSON (no markdown):
 Risk score should be 0-100 based on severity and likelihood combination.`;
 
     const message = await client.messages.create({
-      model: "claude-opus-4-6",
+      model: "claude-sonnet-4-6",
       max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     });

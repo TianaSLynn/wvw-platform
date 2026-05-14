@@ -61,7 +61,7 @@ Risk weights: 2.0 = critical control, 1.5 = important, 1.0 = standard, 0.5 = inf
 Make questions specific, actionable, and verifiable. Focus on what an auditor would actually check.`;
 
     const message = await client.messages.create({
-      model: "claude-opus-4-6",
+      model: "claude-sonnet-4-6",
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     });
