@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useOptimistic, useTransition } from "react";
+import { useState, useEffect, useOptimistic, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDate, cn, severityColor } from "@/lib/utils";
@@ -11,6 +11,7 @@ import {
   Plus, FileText, Users, Shield, ClipboardList, TrendingUp,
   ArrowRight, CheckSquare, Eye, Send, Copy, ExternalLink, BarChart3,
   Upload, Link2, StickyNote, X, Download, Cloud,
+  Building2, Briefcase, FolderCheck,
 } from "lucide-react";
 import { MS365FilePicker } from "@/components/ui/MS365FilePicker";
 import { ScoreRing, DomainBarChart, ScoreSummary } from "@/components/ui/ScoringCharts";
@@ -62,7 +63,7 @@ interface Props {
   initialTab?: "checklist" | "findings" | "evidence" | "team" | "overview";
 }
 
-type Tab = "checklist" | "findings" | "evidence" | "team" | "overview" | "survey" | "results";
+type Tab = "checklist" | "findings" | "evidence" | "tracker" | "team" | "overview" | "survey" | "results";
 
 const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"];
 const STATUS_LABELS: Record<string, string> = {
@@ -137,6 +138,7 @@ export default function AuditDetailClient({
     { id: "checklist", label: "Checklist", count: totalItems },
     { id: "findings",  label: "Findings",  count: audit.findings.length },
     { id: "evidence",  label: "Evidence",  count: audit.evidence.length },
+    { id: "tracker",   label: "Evidence Tracker" },
     { id: "team",      label: "Team",      count: audit.members.length },
     { id: "survey",    label: "Survey Distribution" },
     { id: "results",   label: "Results & Insights" },
@@ -236,6 +238,7 @@ export default function AuditDetailClient({
         )}
         {tab === "findings"  && <FindingsTab findings={audit.findings} auditId={audit.id} />}
         {tab === "evidence"  && <EvidenceTab evidence={audit.evidence} auditId={audit.id} />}
+        {tab === "tracker"   && <EvidenceTrackerTab auditId={audit.id} />}
         {tab === "team"      && <TeamTab members={audit.members} />}
         {tab === "survey"    && <SurveyDistributionTab auditId={audit.id} auditName={audit.name} onScored={() => { showToast("Scores computed — switching to Results tab."); setTab("results"); }} />}
         {tab === "results"   && <ResultsTab auditId={audit.id} />}
@@ -1271,6 +1274,326 @@ function ResultsTab({ auditId }: { auditId: string }) {
       )}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
+    </div>
+  );
+}
+
+// ─── Evidence Tracker Tab ────────────────────────────────────────────────────
+
+type TrackerEvidence = {
+  id: string; title: string; type: string;
+  fileUrl: string | null; fileName: string | null; fileSize: number | null;
+  collectedAt: string;
+  uploadedBy: { firstName: string; lastName: string } | null;
+};
+
+type TrackerItem = {
+  id: string; question: string; guidance: string | null;
+  isRequired: boolean; response: string | null; isCompleted: boolean; sortOrder: number;
+  evidence: TrackerEvidence[];
+};
+
+type TrackerSection = { id: string; title: string; items: TrackerItem[] };
+
+type TrackerClient = {
+  id: string; name: string; legalName: string | null;
+  industry: string | null; size: string | null;
+  description: string | null; website: string | null;
+};
+
+type TrackerPriorAudit = {
+  id: string; name: string; type: string; status: string;
+  completedAt: string | null;
+  _count: { findings: number; evidence: number };
+};
+
+type TrackerData = {
+  client: TrackerClient | null;
+  priorAudits: TrackerPriorAudit[];
+  sections: TrackerSection[];
+  summary: { total: number; covered: number; missing: number };
+};
+
+function EvidenceTrackerTab({ auditId }: { auditId: string }) {
+  const [data, setData] = useState<TrackerData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/evidence-tracker`);
+      if (res.ok) {
+        const { data: d } = await res.json();
+        setData(d);
+        // Auto-expand all sections on first load
+        if (d?.sections) {
+          setExpandedSections(new Set(d.sections.map((s: TrackerSection) => s.id)));
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [auditId]);
+
+  const toggleItem = (id: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSection = (id: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleUpload = async (itemId: string, file: File) => {
+    setUploadingItemId(itemId);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("title", file.name.replace(/\.[^.]+$/, ""));
+      form.append("type", "DOCUMENT");
+      form.append("auditId", auditId);
+      form.append("checklistItemId", itemId);
+      const res = await fetch("/api/evidence/upload", { method: "POST", body: form });
+      if (res.ok) await load();
+    } finally {
+      setUploadingItemId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map(i => (
+          <div key={i} className="section-card animate-pulse">
+            <div className="p-5 space-y-3">
+              <div className="h-4 bg-muted rounded w-1/3" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (!data) return <p className="text-sm text-muted-foreground">Failed to load evidence tracker.</p>;
+
+  const { client, priorAudits, sections, summary } = data;
+  const coveragePct = summary.total > 0 ? Math.round((summary.covered / summary.total) * 100) : 0;
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+
+      {/* Client Profile Card */}
+      {client && (
+        <div className="section-card">
+          <div className="section-card-header flex items-center gap-2">
+            <Building2 size={15} className="text-gold" />
+            <h3 className="text-sm font-semibold">Client Profile</h3>
+          </div>
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="text-base font-semibold text-foreground">{client.name}</p>
+                {client.legalName && client.legalName !== client.name && (
+                  <span className="text-xs text-muted-foreground">({client.legalName})</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {client.industry && <span>Industry: <span className="text-foreground font-medium">{client.industry}</span></span>}
+                {client.size && <span>Size: <span className="text-foreground font-medium">{client.size}</span></span>}
+                {client.website && (
+                  <a href={client.website} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-500 hover:underline">
+                    <ExternalLink size={11} /> Website
+                  </a>
+                )}
+              </div>
+              {client.description && (
+                <p className="text-xs text-muted-foreground leading-relaxed mt-1">{client.description}</p>
+              )}
+            </div>
+            <Link href={`/clients/${client.id}`}
+              className="btn-ghost text-xs flex-shrink-0 flex items-center gap-1">
+              <ExternalLink size={12} /> View Client
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Coverage Summary */}
+      <div className="section-card">
+        <div className="section-card-header flex items-center gap-2">
+          <FolderCheck size={15} className="text-gold" />
+          <h3 className="text-sm font-semibold">Evidence Coverage</h3>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{summary.covered} of {summary.total} required items covered</span>
+            <span className={cn("font-semibold", coveragePct === 100 ? "text-green-500" : coveragePct >= 60 ? "text-amber-500" : "text-red-500")}>
+              {coveragePct}%
+            </span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2">
+            <div className="h-2 rounded-full transition-all duration-500"
+              style={{
+                width: `${coveragePct}%`,
+                backgroundColor: coveragePct === 100 ? "#22c55e" : coveragePct >= 60 ? "#f59e0b" : "#ef4444"
+              }} />
+          </div>
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><CheckCircle2 size={11} className="text-green-500" /> {summary.covered} covered</span>
+            <span className="flex items-center gap-1"><AlertTriangle size={11} className="text-red-500" /> {summary.missing} missing</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Prior Audits */}
+      {priorAudits.length > 0 && (
+        <div className="section-card">
+          <div className="section-card-header flex items-center gap-2">
+            <Briefcase size={15} className="text-gold" />
+            <h3 className="text-sm font-semibold">Prior Audits for This Client</h3>
+          </div>
+          <div className="divide-y divide-border">
+            {priorAudits.map(pa => (
+              <div key={pa.id} className="px-5 py-3 flex items-center justify-between">
+                <div>
+                  <Link href={`/audits/${pa.id}`} className="text-sm font-medium hover:text-gold transition-colors">
+                    {pa.name}
+                  </Link>
+                  <div className="flex gap-3 text-xs text-muted-foreground mt-0.5">
+                    <span>{pa.type.replace(/_/g, " ")}</span>
+                    {pa.completedAt && <span>Completed {new Date(pa.completedAt).toLocaleDateString()}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{pa._count.findings} findings</span>
+                  <span>{pa._count.evidence} evidence</span>
+                  <Badge variant={pa.status === "COMPLETED" ? "success" : "secondary"} className="text-xs">
+                    {pa.status}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Evidence Items by Section */}
+      {sections.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-icon"><FolderCheck size={22} className="text-muted-foreground" /></div>
+          <p className="text-sm font-medium text-muted-foreground">No evidence-required items</p>
+          <p className="text-xs text-muted-foreground mt-1">Mark checklist items as requiring evidence to track them here.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {sections.map(section => {
+            const sectionCovered = section.items.filter(i => i.evidence.length > 0).length;
+            const isOpen = expandedSections.has(section.id);
+            return (
+              <div key={section.id} className="section-card">
+                <button
+                  onClick={() => toggleSection(section.id)}
+                  className="section-card-header w-full flex items-center justify-between text-left hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center gap-2">
+                    {isOpen ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
+                    <h4 className="text-sm font-semibold">{section.title}</h4>
+                  </div>
+                  <span className={cn("text-xs font-medium", sectionCovered === section.items.length ? "text-green-500" : "text-muted-foreground")}>
+                    {sectionCovered}/{section.items.length}
+                  </span>
+                </button>
+
+                {isOpen && (
+                  <div className="divide-y divide-border">
+                    {section.items.map(item => {
+                      const covered = item.evidence.length > 0;
+                      const isExpanded = expandedItems.has(item.id);
+                      const uploading = uploadingItemId === item.id;
+                      return (
+                        <div key={item.id} className="px-5 py-3">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 flex-shrink-0">
+                              {covered
+                                ? <CheckCircle2 size={15} className="text-green-500" />
+                                : item.isRequired
+                                  ? <AlertTriangle size={15} className="text-red-400" />
+                                  : <Circle size={15} className="text-muted-foreground" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm text-foreground leading-snug">{item.question}</p>
+                                <button
+                                  onClick={() => toggleItem(item.id)}
+                                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 mt-0.5">
+                                  {isExpanded ? "less" : "more"}
+                                </button>
+                              </div>
+
+                              {isExpanded && item.guidance && (
+                                <p className="text-xs text-muted-foreground mt-1 leading-relaxed italic">{item.guidance}</p>
+                              )}
+
+                              {/* Existing Evidence Pills */}
+                              {item.evidence.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                  {item.evidence.map(ev => (
+                                    <a key={ev.id} href={ev.fileUrl ?? "#"} target="_blank" rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20 rounded px-2 py-0.5 hover:bg-green-500/20 transition-colors">
+                                      <FileText size={10} />
+                                      {ev.fileName ?? ev.title}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Inline Upload */}
+                              <div className="mt-2">
+                                <label className={cn(
+                                  "inline-flex items-center gap-1.5 text-xs cursor-pointer border rounded px-2.5 py-1 transition-colors",
+                                  uploading
+                                    ? "border-muted text-muted-foreground cursor-not-allowed"
+                                    : "border-dashed border-muted-foreground/40 text-muted-foreground hover:border-gold hover:text-gold"
+                                )}>
+                                  <Upload size={11} />
+                                  {uploading ? "Uploading…" : "Upload evidence"}
+                                  <input
+                                    type="file"
+                                    className="sr-only"
+                                    disabled={uploading}
+                                    onChange={e => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handleUpload(item.id, file);
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
