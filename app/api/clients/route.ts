@@ -4,6 +4,7 @@ import { ok, created, unauthorized, badRequest, serverError } from "@/lib/api-re
 import { logActivity } from "@/lib/activity";
 import { clientSchema } from "@/lib/validations";
 import { getCurrentUser } from "@/lib/auth";
+import { createOnboardingWorkflow } from "@/lib/onboarding-service";
 
 export async function GET(req: Request) {
   try {
@@ -64,6 +65,14 @@ export async function POST(req: Request) {
       afterData: client,
       clientId: client.id,
     });
+
+    // Auto-launch client onboarding workflow
+    createOnboardingWorkflow({
+      orgId:      user.orgId,
+      entityType: "CLIENT",
+      clientId:   client.id,
+      type:       "ONBOARDING",
+    }).catch(() => {});
 
     return created(client);
   } catch (e) { return serverError(e); }

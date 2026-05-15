@@ -174,7 +174,7 @@ export default async function HrisHubPage() {
             <div className="mt-2 space-y-1">
               {overdueSteps.slice(0, 4).map((step) => (
                 <p key={step.id} className="text-xs text-muted-foreground truncate">
-                  <span className="font-medium text-foreground">{step.workflow.employee.firstName} {step.workflow.employee.lastName}</span>
+                  <span className="font-medium text-foreground">{step.workflow.employee?.firstName} {step.workflow.employee?.lastName}</span>
                   {" — "}{step.title}
                   {step.dueDate && <span className="text-red-500 ml-1">({daysAgo(step.dueDate)}d overdue)</span>}
                 </p>
@@ -234,8 +234,8 @@ export default async function HrisHubPage() {
                 {onboardingPct.map((w) => (
                   <Link key={w.id} href="/workforce/onboarding" className="px-5 py-3 flex items-center gap-4 hover:bg-muted/30 transition-colors block">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">{w.employee.firstName} {w.employee.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{w.employee.title ?? "New hire"}</p>
+                      <p className="text-sm font-semibold">{w.employee?.firstName} {w.employee?.lastName}</p>
+                      <p className="text-xs text-muted-foreground">{w.employee?.title ?? "New hire"}</p>
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
                       <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">

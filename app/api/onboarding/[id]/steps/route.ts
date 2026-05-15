@@ -1,5 +1,6 @@
 /**
- * Onboarding step management — update status, add custom steps, etc.
+ * Onboarding step management — update status, add custom steps.
+ * When a step is COMPLETED, any steps blocked by it are automatically unlocked (→ PENDING).
  */
 import { db } from "@/lib/db";
 import { ok, created, unauthorized, notFound, badRequest, serverError } from "@/lib/api-response";
@@ -10,20 +11,20 @@ const STEP_STATUSES = ["PENDING","IN_PROGRESS","COMPLETED","SKIPPED","BLOCKED"] 
 const STEP_CATEGORIES = ["HR","IT","TRAINING","CULTURE","LEGAL","INTRO","GENERAL"] as const;
 
 const updateStepSchema = z.object({
-  stepId:      z.string(),
-  status:      z.enum(STEP_STATUSES).optional(),
-  notes:       z.string().nullable().optional(),
-  dueDate:     z.string().nullable().optional(),
+  stepId:       z.string(),
+  status:       z.enum(STEP_STATUSES).optional(),
+  notes:        z.string().nullable().optional(),
+  dueDate:      z.string().nullable().optional(),
   assignedToId: z.string().nullable().optional(),
 });
 
 const addStepSchema = z.object({
-  title:       z.string().min(1),
-  description: z.string().optional(),
-  category:    z.enum(STEP_CATEGORIES).default("GENERAL"),
-  dueDate:     z.string().optional(),
+  title:        z.string().min(1),
+  description:  z.string().optional(),
+  category:     z.enum(STEP_CATEGORIES).default("GENERAL"),
+  dueDate:      z.string().optional(),
   assignedToId: z.string().optional(),
-  sortOrder:   z.number().optional(),
+  sortOrder:    z.number().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -41,6 +42,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { stepId, status, notes, dueDate, assignedToId } = parsed.data;
 
+    // Prevent completing a blocked step
+    if (status === "COMPLETED" || status === "IN_PROGRESS") {
+      const current = await db.onboardingStep.findUnique({
+        where: { id: stepId },
+        include: { blockedByStep: true },
+      });
+      if (current?.blockedByStep && current.blockedByStep.status !== "COMPLETED" && current.blockedByStep.status !== "SKIPPED") {
+        return badRequest(`This step is blocked by "${current.blockedByStep.title}" — complete that step first.`);
+      }
+    }
+
     const step = await db.onboardingStep.update({
       where: { id: stepId },
       data: {
@@ -48,20 +60,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           status,
           completedAt: status === "COMPLETED" ? new Date() : null,
         } : {}),
-        ...(notes       !== undefined ? { notes }       : {}),
+        ...(notes        !== undefined ? { notes }                          : {}),
         ...(assignedToId !== undefined ? { assignedToId: assignedToId || null } : {}),
-        ...(dueDate     !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
+        ...(dueDate      !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       },
     });
 
-    // Auto-complete workflow if all steps done
+    // When a step is completed or skipped, unlock steps that were blocked by it
     if (status === "COMPLETED" || status === "SKIPPED") {
+      await db.onboardingStep.updateMany({
+        where: { workflowId, blockedByStepId: stepId, status: "BLOCKED" },
+        data:  { status: "PENDING" },
+      });
+
+      // Auto-complete workflow if all steps done
       const allSteps = await db.onboardingStep.findMany({ where: { workflowId } });
-      const allDone = allSteps.every((s) => s.status === "COMPLETED" || s.status === "SKIPPED");
+      const allDone = allSteps.every(s => s.status === "COMPLETED" || s.status === "SKIPPED");
       if (allDone) {
         await db.onboardingWorkflow.update({
           where: { id: workflowId },
-          data: { status: "COMPLETED", completedAt: new Date() },
+          data:  { status: "COMPLETED", completedAt: new Date() },
         });
       }
     }
@@ -85,9 +103,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { dueDate, assignedToId, ...rest } = parsed.data;
 
-    // Get max sortOrder
     const lastStep = await db.onboardingStep.findFirst({
-      where: { workflowId },
+      where:   { workflowId },
       orderBy: { sortOrder: "desc" },
     });
 
@@ -95,9 +112,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       data: {
         ...rest,
         workflowId,
-        sortOrder:   rest.sortOrder ?? (lastStep?.sortOrder ?? 0) + 1,
-        status:      "PENDING",
-        dueDate:     dueDate ? new Date(dueDate) : null,
+        sortOrder:    rest.sortOrder ?? (lastStep?.sortOrder ?? 0) + 1,
+        status:       "PENDING",
+        dueDate:      dueDate ? new Date(dueDate) : null,
         assignedToId: assignedToId || null,
       },
     });

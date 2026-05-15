@@ -281,7 +281,7 @@ export async function GET(req: Request) {
         .map((s) => ({
           id: `step-${s.id}`,
           title: s.title,
-          subtitle: `Onboarding: ${s.workflow.employee.firstName} ${s.workflow.employee.lastName}`,
+          subtitle: `Onboarding: ${s.workflow.employee?.firstName ?? ""} ${s.workflow.employee?.lastName ?? ""}`.trim(),
           date: s.dueDate as Date,
           type: "task" as const,
           meta: s.category,

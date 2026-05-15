@@ -49,7 +49,7 @@ export default async function OnboardingHubPage() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">
-                  {activeWorkflow.employee.firstName} {activeWorkflow.employee.lastName} — Onboarding
+                  {activeWorkflow.employee?.firstName} {activeWorkflow.employee?.lastName} — Onboarding
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Started {activeWorkflow.startDate.toLocaleDateString()}
@@ -117,7 +117,7 @@ export default async function OnboardingHubPage() {
                   return (
                     <div key={w.id} className="flex items-center gap-3 px-4 py-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{w.employee.firstName} {w.employee.lastName}</p>
+                        <p className="text-sm font-medium text-foreground">{w.employee?.firstName} {w.employee?.lastName}</p>
                         <p className="text-xs text-muted-foreground">Started {w.startDate.toLocaleDateString()}</p>
                       </div>
                       <span className="text-xs text-muted-foreground">{comp}/{tot} steps</span>

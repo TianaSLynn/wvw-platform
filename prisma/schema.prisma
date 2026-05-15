@@ -361,18 +361,19 @@ model Client {
   deletedAt       DateTime?
 
   // Relations
-  contacts        Contact[]
-  projects        Project[]
-  audits          Audit[]
-  invoices        Invoice[]
-  documents       Document[]
-  activityLogs    ActivityLog[]
-  employees       Employee[]
-  opportunities   Opportunity[]
-  crmActivities   CrmActivity[]
-  meetings        Meeting[]
-  messageThreads  MessageThread[]
-  packageLicenses PackageLicense[]
+  contacts             Contact[]
+  projects             Project[]
+  audits               Audit[]
+  invoices             Invoice[]
+  documents            Document[]
+  activityLogs         ActivityLog[]
+  employees            Employee[]
+  opportunities        Opportunity[]
+  crmActivities        CrmActivity[]
+  meetings             Meeting[]
+  messageThreads       MessageThread[]
+  packageLicenses      PackageLicense[]
+  onboardingWorkflows  OnboardingWorkflow[]
 
   @@index([orgId, isActive])
   @@index([orgId, name])
@@ -1951,8 +1952,20 @@ model OnboardingWorkflow {
   id          String       @id @default(cuid())
   orgId       String
   org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  employeeId  String
-  employee    Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  entityType  String       @default("EMPLOYEE") // EMPLOYEE | CLIENT | STUDENT
+
+  employeeId  String?
+  employee    Employee?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  clientId    String?
+  client      Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // For students/cohort members not linked to an Employee record
+  studentName  String?
+  studentEmail String?
+  cohortId     String?
+
   type        WorkflowType @default(ONBOARDING)
   status      String       @default("ACTIVE") // ACTIVE | COMPLETED | CANCELLED
   startDate   DateTime     @default(now())
@@ -1966,7 +1979,9 @@ model OnboardingWorkflow {
   updatedAt   DateTime     @updatedAt
 
   @@index([orgId, type])
+  @@index([orgId, entityType])
   @@index([employeeId])
+  @@index([clientId])
 }
 
 model OnboardingStep {
@@ -1975,6 +1990,11 @@ model OnboardingStep {
   workflow     OnboardingWorkflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
   assignedToId String?
   assignedTo   User?               @relation("AssignedOnboardingSteps", fields: [assignedToId], references: [id])
+
+  // Sequential dependency: this step stays BLOCKED until blockedByStep is COMPLETED
+  blockedByStepId String?
+  blockedByStep   OnboardingStep?    @relation("StepBlocker", fields: [blockedByStepId], references: [id], onDelete: SetNull)
+  blocksSteps     OnboardingStep[]   @relation("StepBlocker")
 
   title        String
   description  String?             @db.Text
@@ -1989,6 +2009,7 @@ model OnboardingStep {
   updatedAt    DateTime            @updatedAt
 
   @@index([workflowId])
+  @@index([blockedByStepId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
