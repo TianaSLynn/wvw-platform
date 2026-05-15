@@ -20,7 +20,6 @@ export default async function SurveyPage({ params }: { params: Promise<{ token: 
         select: {
           id: true, title: true, sortOrder: true,
           checklistItems: {
-            where: { guidance: { contains: "scale:1-5" } },
             orderBy: { sortOrder: "asc" },
             select: {
               id: true, question: true, guidance: true,
@@ -35,8 +34,6 @@ export default async function SurveyPage({ params }: { params: Promise<{ token: 
   if (!audit) notFound();
 
   const sections = audit.sections.filter((s) => s.checklistItems.length > 0);
-  if (sections.length === 0) notFound();
-
   const totalQuestions = sections.reduce((s, sec) => s + sec.checklistItems.length, 0);
 
   const survey = {

@@ -60,7 +60,7 @@ interface Props {
   completedItems: number;
   findingsBySeverity: Record<string, number>;
   currentUserId: string;
-  initialTab?: "checklist" | "findings" | "evidence" | "team" | "overview";
+  initialTab?: "checklist" | "findings" | "evidence" | "tracker" | "team" | "overview" | "survey" | "results";
 }
 
 type Tab = "checklist" | "findings" | "evidence" | "tracker" | "team" | "overview" | "survey" | "results";

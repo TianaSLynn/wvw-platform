@@ -1,6 +1,5 @@
 /**
- * Shared service for creating onboarding workflows with sequential blocking.
- * Used by POST /api/onboarding and auto-triggered from client/employee creation.
+ * Shared service for creating onboarding workflows with sequential blocking and document tracking.
  */
 import { db } from "@/lib/db";
 import {
@@ -9,36 +8,36 @@ import {
   EMPLOYEE_OFFBOARDING_STEPS,
   CLIENT_ONBOARDING_STEPS,
   STUDENT_ONBOARDING_STEPS,
+  INSTRUCTOR_ONBOARDING_STEPS,
 } from "@/lib/onboarding-templates";
 
 export type CreateWorkflowInput = {
-  orgId:        string;
-  entityType:   "EMPLOYEE" | "CLIENT" | "STUDENT";
-  employeeId?:  string;
-  clientId?:    string;
-  studentName?: string;
+  orgId:         string;
+  entityType:    "EMPLOYEE" | "CLIENT" | "STUDENT" | "INSTRUCTOR";
+  employeeId?:   string;
+  clientId?:     string;
+  studentName?:  string;
   studentEmail?: string;
-  cohortId?:    string;
-  type:         "ONBOARDING" | "OFFBOARDING";
-  targetDate?:  Date | null;
-  notes?:       string | null;
-  template?:    OnboardingStepTemplate[]; // override default template
+  cohortId?:     string;
+  type:          "ONBOARDING" | "OFFBOARDING";
+  targetDate?:   Date | null;
+  notes?:        string | null;
+  template?:     OnboardingStepTemplate[];
 };
 
 export async function createOnboardingWorkflow(input: CreateWorkflowInput) {
   const { orgId, entityType, employeeId, clientId, studentName, studentEmail, cohortId, type, targetDate, notes, template } = input;
 
-  // Pick default template if none provided
   let steps = template ?? (
-    entityType === "CLIENT"  ? CLIENT_ONBOARDING_STEPS :
-    entityType === "STUDENT" ? STUDENT_ONBOARDING_STEPS :
-    type === "OFFBOARDING"   ? EMPLOYEE_OFFBOARDING_STEPS :
+    entityType === "CLIENT"     ? CLIENT_ONBOARDING_STEPS :
+    entityType === "STUDENT"    ? STUDENT_ONBOARDING_STEPS :
+    entityType === "INSTRUCTOR" ? INSTRUCTOR_ONBOARDING_STEPS :
+    type === "OFFBOARDING"      ? EMPLOYEE_OFFBOARDING_STEPS :
     EMPLOYEE_ONBOARDING_STEPS
   );
 
   steps = [...steps].sort((a, b) => a.sortOrder - b.sortOrder);
 
-  // Create workflow + steps (blocked steps start as BLOCKED, others as PENDING)
   const workflow = await db.onboardingWorkflow.create({
     data: {
       orgId,
@@ -55,22 +54,25 @@ export async function createOnboardingWorkflow(input: CreateWorkflowInput) {
       notes:      notes ?? null,
       steps: {
         create: steps.map((s) => ({
-          title:       s.title,
-          description: s.description,
-          category:    s.category,
-          sortOrder:   s.sortOrder,
-          status:      s.blockedBySortOrder ? "BLOCKED" : "PENDING",
+          title:             s.title,
+          description:       s.description,
+          category:          s.category,
+          sortOrder:         s.sortOrder,
+          status:            s.blockedBySortOrder ? "BLOCKED" : "PENDING",
+          documentRequired:  s.documentRequired  ?? false,
+          documentLabel:     s.documentLabel     ?? null,
+          documentCollected: false,
         })),
       },
     },
     include: { steps: { orderBy: { sortOrder: "asc" } } },
   });
 
-  // Wire blockedByStepId using real IDs now that steps exist
+  // Wire blockedByStepId
   const stepsByOrder: Record<number, string> = {};
   for (const s of workflow.steps) stepsByOrder[s.sortOrder] = s.id;
 
-  const updates = workflow.steps
+  const blockUpdates = workflow.steps
     .map((s) => {
       const tpl = steps.find((t) => t.sortOrder === s.sortOrder);
       if (!tpl?.blockedBySortOrder) return null;
@@ -79,9 +81,9 @@ export async function createOnboardingWorkflow(input: CreateWorkflowInput) {
     })
     .filter(Boolean) as { id: string; blockedByStepId: string }[];
 
-  if (updates.length > 0) {
+  if (blockUpdates.length > 0) {
     await Promise.all(
-      updates.map((u) =>
+      blockUpdates.map((u) =>
         db.onboardingStep.update({ where: { id: u.id }, data: { blockedByStepId: u.blockedByStepId } })
       )
     );

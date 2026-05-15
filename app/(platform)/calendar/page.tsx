@@ -4,9 +4,10 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Calendar, Flag, ClipboardList, AlertCircle, Video, Users, Briefcase,
   UserCheck, CalendarDays, Star, Moon, ChevronLeft, ChevronRight,
-  Plus, Filter, X, Clock, Building2,
+  Clock, Gift, TrendingUp, Umbrella, X, ExternalLink, Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,13 @@ type EventType =
   | "interview"
   | "onboarding"
   | "invoice_due"
-  | "cultural";
+  | "cultural"
+  | "holiday"
+  | "birthday"
+  | "promotion"
+  | "pto";
+
+type DetailItem = { label: string; value: string };
 
 type UnifiedEvent = {
   id: string;
@@ -27,10 +34,15 @@ type UnifiedEvent = {
   date: Date;
   type: EventType;
   link?: string;
-  meta?: string; // e.g. "60 min", "CRITICAL", "$2,400"
+  meta?: string;
+  description?: string;
+  details?: DetailItem[];
+  isOffDay?: boolean;
+  offType?: string;
 };
 
-// ─── Cultural calendar data ───────────────────────────────────────────────────
+// ─── WVW Cultural events injected client-side for current/visible month ───────
+// (These are also returned by the API, but we keep them here for the detail panel)
 
 type CulturalEvent = {
   name: string;
@@ -86,33 +98,180 @@ const EVENT_CONFIG: Record<EventType, { label: string; color: string; bg: string
   audit_end:    { label: "Audit End",  color: "text-red-600",     bg: "bg-red-500/10",     border: "border-red-500/30",     icon: AlertCircle },
   milestone:    { label: "Milestone",  color: "text-amber-600",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   icon: Flag },
   task:         { label: "Task Due",   color: "text-orange-600",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  icon: AlertCircle },
-  invoice_due:  { label: "Invoice",   color: "text-rose-600",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    icon: Briefcase },
-  cultural:     { label: "Cultural",  color: "text-purple-600",  bg: "bg-purple-500/10",  border: "border-purple-500/30",  icon: CalendarDays },
+  invoice_due:  { label: "Invoice",    color: "text-rose-600",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    icon: Briefcase },
+  cultural:     { label: "Cultural",   color: "text-purple-600",  bg: "bg-purple-500/10",  border: "border-purple-500/30",  icon: CalendarDays },
+  holiday:      { label: "Holiday",    color: "text-indigo-600",  bg: "bg-indigo-500/10",  border: "border-indigo-500/30",  icon: Star },
+  birthday:     { label: "Birthday",   color: "text-pink-600",    bg: "bg-pink-500/10",    border: "border-pink-500/30",    icon: Gift },
+  promotion:    { label: "Promotion",  color: "text-yellow-700",  bg: "bg-yellow-50",      border: "border-yellow-300",     icon: TrendingUp },
+  pto:          { label: "PTO",        color: "text-teal-600",    bg: "bg-teal-500/10",    border: "border-teal-500/30",    icon: Umbrella },
 };
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Event Detail Modal ───────────────────────────────────────────────────────
+
+function EventDetailModal({ event, onClose }: { event: UnifiedEvent; onClose: () => void }) {
+  const cfg = EVENT_CONFIG[event.type];
+  const Icon = cfg.icon;
+  const dateStr = event.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const timeStr = event.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const showTime = event.date.getHours() !== 0 || event.date.getMinutes() !== 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-md bg-background rounded-2xl shadow-2xl border border-border overflow-hidden animate-fade-in-scale"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className={cn("px-5 py-4 border-b border-border flex items-start gap-3", cfg.bg)}>
+          <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border mt-0.5", cfg.bg, cfg.border)}>
+            <Icon size={16} className={cfg.color} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <span className={cn("text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border", cfg.color, cfg.bg, cfg.border)}>
+                {cfg.label}
+              </span>
+              {event.isOffDay && event.offType && (
+                <span className="flex items-center gap-0.5 text-[10px] font-medium text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full border border-blue-500/20">
+                  <Moon size={9} /> {event.offType}
+                </span>
+              )}
+            </div>
+            <h3 className="text-sm font-bold text-foreground leading-snug">{event.title}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">{event.subtitle}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/10 transition-colors flex-shrink-0" aria-label="Close">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-border flex items-center gap-2 text-sm">
+          <Calendar size={13} className="text-muted-foreground flex-shrink-0" />
+          <span className="font-medium">{dateStr}</span>
+          {showTime && <span className="text-muted-foreground">· {timeStr}</span>}
+        </div>
+
+        {(event.details?.length ?? 0) > 0 && (
+          <div className="px-5 py-4 space-y-2.5">
+            {event.details!.map((item, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="text-xs text-muted-foreground w-28 flex-shrink-0 pt-0.5">{item.label}</span>
+                <span className="text-xs font-medium text-foreground flex-1">{item.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {event.description && (
+          <div className="px-5 pb-4">
+            <p className="text-xs text-muted-foreground italic">{event.description}</p>
+          </div>
+        )}
+
+        {event.link && (
+          <div className="px-5 py-3 border-t border-border bg-muted/30">
+            <Link href={event.link} className="flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-gold transition-colors" onClick={onClose}>
+              <ExternalLink size={12} /> View in platform
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Day Detail Panel (shown when clicking a date number) ────────────────────
+
+function DayPanel({ day, month, year, events, onClose, onSelectEvent }: {
+  day: number; month: number; year: number;
+  events: UnifiedEvent[];
+  onClose: () => void;
+  onSelectEvent: (e: UnifiedEvent) => void;
+}) {
+  const date = new Date(year, month, day);
+  const dateStr = date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const culturalForDay = CULTURAL_EVENTS.filter(e => e.startDay && e.monthNum === (month + 1) && day >= e.startDay && (e.endDay ? day <= e.endDay : day === e.startDay));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      <div className="relative w-full max-w-sm bg-background rounded-2xl shadow-2xl border border-border overflow-hidden animate-fade-in-scale max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-muted/30">
+          <div>
+            <p className="text-xs text-muted-foreground font-medium">{dateStr}</p>
+            <p className="text-sm font-bold">{events.length + culturalForDay.length} event{events.length + culturalForDay.length !== 1 ? "s" : ""}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Close"><X size={14} /></button>
+        </div>
+        <div className="overflow-y-auto divide-y divide-border">
+          {culturalForDay.map((ce, i) => {
+            const isWvw = ce.notes?.toLowerCase().includes("non-negotiable") || ce.notes?.toLowerCase().includes("signature wvw") || ce.notes?.toLowerCase().includes("wvw core");
+            return (
+              <div key={i} className={cn("px-4 py-3 flex items-start gap-3", ce.isOffDay && "bg-blue-500/5")}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-purple-500/10 border border-purple-500/20 flex-shrink-0">
+                  <CalendarDays size={13} className="text-purple-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={cn("text-xs font-semibold truncate", isWvw ? "text-gold" : "text-foreground")}>{ce.name}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-[10px] text-purple-600 bg-purple-500/10 px-1.5 py-0.5 rounded-full">{ce.category}</span>
+                    {ce.isOffDay && <span className="flex items-center gap-0.5 text-[10px] text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full"><Moon size={8} /> {ce.offType}</span>}
+                    {isWvw && <span className="text-[10px] text-gold font-bold">★ WVW</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {events.map(evt => {
+            const cfg = EVENT_CONFIG[evt.type];
+            const Icon = cfg.icon;
+            const timeStr = evt.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+            const showTime = evt.date.getHours() !== 0 || evt.date.getMinutes() !== 0;
+            return (
+              <button key={evt.id} type="button" onClick={() => { onClose(); onSelectEvent(evt); }} className="w-full px-4 py-3 flex items-start gap-3 hover:bg-muted/40 transition-colors text-left">
+                <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 border", cfg.bg, cfg.border)}>
+                  <Icon size={13} className={cfg.color} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground truncate">{evt.title}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{evt.subtitle}</p>
+                  {showTime && <p className="text-[10px] text-muted-foreground">{timeStr}</p>}
+                </div>
+              </button>
+            );
+          })}
+          {events.length === 0 && culturalForDay.length === 0 && (
+            <div className="p-6 text-center text-sm text-muted-foreground">No events this day</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Calendar ────────────────────────────────────────────────────────────
 
 export default function UnifiedCalendarPage() {
   const now = new Date();
-  const [viewMode, setViewMode] = useState<"schedule" | "cultural">("schedule");
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-indexed
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [filterType, setFilterType] = useState<EventType | "all">("all");
   const [events, setEvents] = useState<UnifiedEvent[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Cultural calendar state
-  const [culturalMonth, setCulturalMonth] = useState(now.getMonth() + 1); // 1-indexed
+  const [selectedEvent, setSelectedEvent] = useState<UnifiedEvent | null>(null);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [showOffOnly, setShowOffOnly] = useState(false);
+  const [showCultural, setShowCultural] = useState(true);
 
-  // ── Fetch events from API ──────────────────────────────────────────────────
   useEffect(() => {
     const fetchEvents = async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/calendar/events");
+        const from = new Date(selectedYear, selectedMonth - 1, 1).toISOString();
+        const to = new Date(selectedYear, selectedMonth + 2, 0).toISOString();
+        const res = await fetch(`/api/calendar/events?from=${from}&to=${to}`);
         if (res.ok) {
           const { data } = await res.json();
           setEvents(
@@ -123,15 +282,14 @@ export default function UnifiedCalendarPage() {
           );
         }
       } catch {
-        // silently fail — calendar will show empty state
+        // silently fail
       } finally {
         setLoading(false);
       }
     };
     fetchEvents();
-  }, []);
+  }, [selectedMonth, selectedYear]);
 
-  // ── Build month grid ──────────────────────────────────────────────────────
   const monthStart = new Date(selectedYear, selectedMonth, 1);
   const monthEnd   = new Date(selectedYear, selectedMonth + 1, 0);
 
@@ -139,19 +297,22 @@ export default function UnifiedCalendarPage() {
     return events
       .filter((e) => {
         const d = e.date;
-        return d >= monthStart && d <= monthEnd && (filterType === "all" || e.type === filterType);
+        return d >= monthStart && d <= monthEnd
+          && (filterType === "all" || e.type === filterType)
+          && (!showOffOnly || e.isOffDay);
       })
       .sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [events, selectedMonth, selectedYear, filterType]);
+  }, [events, selectedMonth, selectedYear, filterType, showOffOnly]);
 
-  // ── Week grouping (next 60 days) ─────────────────────────────────────────
   const upcomingEvents = useMemo(() => {
     const cutoff = new Date(now);
     cutoff.setDate(now.getDate() + 60);
     return events
-      .filter((e) => e.date >= now && e.date <= cutoff && (filterType === "all" || e.type === filterType))
+      .filter((e) => e.date >= now && e.date <= cutoff
+        && (filterType === "all" || e.type === filterType)
+        && (!showOffOnly || e.isOffDay))
       .sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [events, filterType]);
+  }, [events, filterType, showOffOnly]);
 
   function prevMonth() {
     if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(y => y - 1); }
@@ -162,8 +323,7 @@ export default function UnifiedCalendarPage() {
     else setSelectedMonth(m => m + 1);
   }
 
-  // ── Build calendar grid ───────────────────────────────────────────────────
-  const firstDow = monthStart.getDay(); // 0=Sun
+  const firstDow = monthStart.getDay();
   const daysInMonth = monthEnd.getDate();
 
   const eventsByDay: Record<number, UnifiedEvent[]> = {};
@@ -173,16 +333,49 @@ export default function UnifiedCalendarPage() {
     eventsByDay[d]!.push(evt);
   }
 
+  // Cultural events for this month (for grid markers)
+  const culturalForMonth = useMemo(() => {
+    if (!showCultural) return {};
+    const out: Record<number, CulturalEvent[]> = {};
+    for (const ce of CULTURAL_EVENTS) {
+      if (ce.monthNum !== selectedMonth + 1) continue;
+      if (!ce.startDay) continue;
+      const startD = ce.startDay;
+      const endD = ce.endDay && !ce.endMonthNum ? ce.endDay : ce.startDay;
+      for (let d = startD; d <= Math.min(endD, daysInMonth); d++) {
+        if (!out[d]) out[d] = [];
+        out[d]!.push(ce);
+      }
+    }
+    return out;
+  }, [selectedMonth, daysInMonth, showCultural]);
+
+  const offDaySet = useMemo(() => {
+    const s = new Set<number>();
+    for (const evt of monthEvents) { if (evt.isOffDay) s.add(evt.date.getDate()); }
+    for (const [day, ces] of Object.entries(culturalForMonth)) {
+      if (ces.some(ce => ce.isOffDay)) s.add(Number(day));
+    }
+    return s;
+  }, [monthEvents, culturalForMonth]);
+
   const today = now.getDate();
   const isCurrentMonth = selectedMonth === now.getMonth() && selectedYear === now.getFullYear();
 
-  // ── Cultural calendar data for selected month ─────────────────────────────
-  const culturalMonthEvents = CULTURAL_EVENTS.filter(
-    (e) => e.monthNum === culturalMonth && (!showOffOnly || e.isOffDay)
-  );
+  const totalOffDays = CULTURAL_EVENTS.filter(e => e.isOffDay).length;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
+      {selectedEvent && <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />}
+      {selectedDay !== null && (
+        <DayPanel
+          day={selectedDay} month={selectedMonth} year={selectedYear}
+          events={eventsByDay[selectedDay] ?? []}
+          onClose={() => setSelectedDay(null)}
+          onSelectEvent={(e) => { setSelectedDay(null); setSelectedEvent(e); }}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
@@ -191,323 +384,259 @@ export default function UnifiedCalendarPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold">Calendar</h1>
-            <p className="text-xs text-muted-foreground">Meetings, interviews, audits, onboarding, milestones & cultural dates</p>
+            <p className="text-xs text-muted-foreground">All events, holidays, birthdays, cultural dates & WVW observances</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setViewMode("schedule")}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "schedule" ? "bg-navy-900 text-white" : "text-muted-foreground hover:bg-muted")}
-            >
-              Schedule
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("cultural")}
-              className={cn("px-3 py-1.5 text-xs font-medium transition-colors", viewMode === "cultural" ? "bg-gold text-white" : "text-muted-foreground hover:bg-muted")}
-            >
-              Cultural Calendar
-            </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Moon size={11} className="text-blue-500" /> {totalOffDays} WVW off days/year
+          </span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={prevMonth} aria-label="Previous month" className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-sm font-semibold min-w-[130px] text-center">{MONTHS[selectedMonth]} {selectedYear}</span>
+          <button type="button" onClick={nextMonth} aria-label="Next month" className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+            <ChevronRight size={14} />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()); }}
+          className="text-xs text-muted-foreground hover:text-foreground border border-border px-2.5 py-1 rounded-lg transition-colors"
+        >
+          Today
+        </button>
+        <div className="flex items-center gap-3 ml-auto flex-wrap">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={showCultural} onChange={e => setShowCultural(e.target.checked)} className="w-3.5 h-3.5 rounded accent-gold" />
+            <CalendarDays size={11} /> Cultural events
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={showOffOnly} onChange={e => setShowOffOnly(e.target.checked)} className="w-3.5 h-3.5 rounded accent-gold" />
+            <Moon size={11} /> Off days only
+          </label>
+          <div className="flex items-center gap-1.5">
+            <Filter size={11} className="text-muted-foreground" />
+            <select value={filterType} onChange={e => setFilterType(e.target.value as EventType | "all")} aria-label="Filter by event type" className="input-base text-xs py-1 px-2 h-auto">
+              <option value="all">All Types</option>
+              {(Object.entries(EVENT_CONFIG) as [EventType, typeof EVENT_CONFIG[EventType]][]).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
 
-      {/* ── SCHEDULE VIEW ─────────────────────────────────────────────────── */}
-      {viewMode === "schedule" && (
-        <>
-          {/* Controls */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={prevMonth} aria-label="Previous month" className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                <ChevronLeft size={14} />
-              </button>
-              <span className="text-sm font-semibold min-w-[130px] text-center">
-                {MONTHS[selectedMonth]} {selectedYear}
-              </span>
-              <button type="button" onClick={nextMonth} aria-label="Next month" className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-                <ChevronRight size={14} />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()); }}
-              className="text-xs text-muted-foreground hover:text-foreground border border-border px-2.5 py-1 rounded-lg transition-colors"
-            >
-              Today
-            </button>
-            <div className="flex items-center gap-1.5 ml-auto flex-wrap">
-              <Filter size={12} className="text-muted-foreground" />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as EventType | "all")}
-                aria-label="Filter by event type"
-                className="input-base text-xs py-1 px-2 h-auto"
+      {/* Legend */}
+      <div className="flex flex-wrap gap-1.5">
+        {(Object.entries(EVENT_CONFIG) as [EventType, typeof EVENT_CONFIG[EventType]][]).map(([k, v]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setFilterType(f => f === k ? "all" : k)}
+            className={cn("flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border transition-opacity", v.color, v.bg, v.border, filterType !== "all" && filterType !== k && "opacity-30")}
+          >
+            <v.icon size={9} />
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Calendar Grid */}
+      <div className="section-card overflow-hidden">
+        <div className="grid grid-cols-7 border-b border-border bg-muted/30">
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
+            <div key={d} className="px-2 py-2 text-center text-[11px] font-semibold text-muted-foreground">{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {Array.from({ length: firstDow }).map((_, i) => (
+            <div key={`empty-${i}`} className="min-h-[90px] border-b border-r border-border/50 bg-muted/10" />
+          ))}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const day = i + 1;
+            const dayEvents = eventsByDay[day] ?? [];
+            const dayCultural = culturalForMonth[day] ?? [];
+            const isToday = isCurrentMonth && day === today;
+            const isPast = isCurrentMonth && day < today;
+            const isOff = offDaySet.has(day);
+            const hasWvwSignature = dayCultural.some(ce =>
+              ce.notes?.toLowerCase().includes("non-negotiable") ||
+              ce.notes?.toLowerCase().includes("signature wvw") ||
+              ce.notes?.toLowerCase().includes("wvw core")
+            );
+            const allDayItems = [...dayCultural.map(ce => ({ id: `cultural-${ce.name}`, isCultural: true, ce })), ...dayEvents.map(e => ({ id: e.id, isCultural: false, evt: e }))];
+            const showCount = 3;
+            return (
+              <div
+                key={day}
+                className={cn(
+                  "min-h-[90px] border-b border-r border-border/50 p-1 transition-colors",
+                  isToday && "bg-gold/5",
+                  isPast && "opacity-60",
+                  isOff && !isToday && "bg-blue-500/5",
+                  hasWvwSignature && "ring-1 ring-inset ring-purple-500/20"
+                )}
               >
-                <option value="all">All Events</option>
-                {(Object.entries(EVENT_CONFIG) as [EventType, typeof EVENT_CONFIG[EventType]][]).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap gap-2">
-            {(Object.entries(EVENT_CONFIG) as [EventType, typeof EVENT_CONFIG[EventType]][]).map(([k, v]) => (
-              <span key={k} className={cn("flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border", v.color, v.bg, v.border)}>
-                <v.icon size={9} />
-                {v.label}
-              </span>
-            ))}
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="section-card overflow-hidden">
-            {/* Day headers */}
-            <div className="grid grid-cols-7 border-b border-border bg-muted/30">
-              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
-                <div key={d} className="px-2 py-2 text-center text-[11px] font-semibold text-muted-foreground">{d}</div>
-              ))}
-            </div>
-
-            {/* Grid cells */}
-            <div className="grid grid-cols-7">
-              {/* Empty leading cells */}
-              {Array.from({ length: firstDow }).map((_, i) => (
-                <div key={`empty-${i}`} className="min-h-[80px] border-b border-r border-border/50 bg-muted/10" />
-              ))}
-
-              {/* Day cells */}
-              {Array.from({ length: daysInMonth }).map((_, i) => {
-                const day = i + 1;
-                const dayEvents = eventsByDay[day] ?? [];
-                const isToday = isCurrentMonth && day === today;
-                const isPast = isCurrentMonth && day < today;
-                return (
-                  <div
-                    key={day}
-                    className={cn(
-                      "min-h-[80px] border-b border-r border-border/50 p-1.5 transition-colors",
-                      isToday && "bg-gold/5",
-                      isPast && "opacity-60"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1",
-                      isToday ? "bg-gold text-white" : "text-muted-foreground"
-                    )}>
-                      {day}
-                    </div>
-                    <div className="space-y-0.5">
-                      {dayEvents.slice(0, 3).map((evt) => {
-                        const cfg = EVENT_CONFIG[evt.type];
-                        const Icon = cfg.icon;
-                        return (
-                          <div
-                            key={evt.id}
-                            className={cn("flex items-center gap-1 text-[10px] font-medium px-1 py-0.5 rounded truncate border", cfg.color, cfg.bg, cfg.border)}
-                            title={evt.title}
-                          >
-                            <Icon size={8} className="flex-shrink-0" />
-                            <span className="truncate">{evt.title}</span>
-                          </div>
-                        );
-                      })}
-                      {dayEvents.length > 3 && (
-                        <div className="text-[9px] text-muted-foreground px-1">+{dayEvents.length - 3} more</div>
-                      )}
-                    </div>
+                {/* Day number — click to open day panel */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  className="flex items-center gap-1 mb-0.5 w-full group"
+                >
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold transition-colors",
+                    isToday ? "bg-gold text-white" : "text-muted-foreground group-hover:bg-muted"
+                  )}>
+                    {day}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                  {isOff && <Moon size={8} className="text-blue-400" />}
+                  {hasWvwSignature && <Star size={8} className="text-gold" />}
+                </button>
 
-          {/* Upcoming list */}
-          <div className="section-card">
-            <div className="section-card-header flex items-center gap-2">
-              <Clock size={14} className="text-gold" />
-              <h2 className="text-sm font-semibold gradient-text-gold">Next 60 Days</h2>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{upcomingEvents.length}</span>
-            </div>
-            {loading ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Loading events…</div>
-            ) : upcomingEvents.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state-icon"><Calendar size={24} className="text-muted-foreground/40" /></div>
-                <p className="text-sm font-medium">No upcoming events</p>
-                <p className="text-xs text-muted-foreground mt-1">Schedule meetings, set milestones, and add employees to see events here</p>
+                <div className="space-y-0.5">
+                  {/* Cultural events first (compact) */}
+                  {showCultural && dayCultural.slice(0, showCount).map((ce, ci) => (
+                    <button
+                      key={ci}
+                      type="button"
+                      onClick={() => setSelectedDay(day)}
+                      className="w-full flex items-center gap-1 text-[10px] font-medium px-1 py-0.5 rounded truncate border text-left hover:opacity-80 transition-opacity text-purple-600 bg-purple-500/10 border-purple-500/30"
+                      title={ce.name}
+                    >
+                      <CalendarDays size={8} className="flex-shrink-0" />
+                      <span className="truncate">{ce.name}</span>
+                    </button>
+                  ))}
+
+                  {/* Other events */}
+                  {dayEvents.slice(0, Math.max(0, showCount - (showCultural ? Math.min(dayCultural.length, showCount) : 0))).map((evt) => {
+                    const cfg = EVENT_CONFIG[evt.type];
+                    const Icon = cfg.icon;
+                    return (
+                      <button
+                        key={evt.id}
+                        type="button"
+                        onClick={() => setSelectedEvent(evt)}
+                        className={cn("w-full flex items-center gap-1 text-[10px] font-medium px-1 py-0.5 rounded truncate border text-left hover:opacity-80 transition-opacity cursor-pointer", cfg.color, cfg.bg, cfg.border)}
+                        title={evt.title}
+                      >
+                        <Icon size={8} className="flex-shrink-0" />
+                        <span className="truncate">{evt.title}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* +more count */}
+                  {allDayItems.length > showCount && (
+                    <button type="button" onClick={() => setSelectedDay(day)} className="text-[9px] text-muted-foreground px-1 hover:text-foreground transition-colors">
+                      +{allDayItems.length - showCount} more
+                    </button>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {upcomingEvents.map((evt) => {
-                  const cfg = EVENT_CONFIG[evt.type];
-                  const Icon = cfg.icon;
-                  const dateStr = evt.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                  const timeStr = evt.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-                  const showTime = evt.date.getHours() !== 0 || evt.date.getMinutes() !== 0;
-                  return (
-                    <div key={evt.id} className="flex items-center gap-3 px-4 py-3">
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border", cfg.bg, cfg.border)}>
-                        <Icon size={14} className={cfg.color} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{evt.title}</p>
-                        <p className="text-xs text-muted-foreground">{evt.subtitle}</p>
-                      </div>
-                      {evt.meta && (
-                        <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", cfg.color, cfg.bg, cfg.border)}>
-                          {evt.meta}
-                        </span>
-                      )}
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-xs font-medium text-foreground">{dateStr}</p>
-                        {showTime && <p className="text-[10px] text-muted-foreground">{timeStr}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </>
-      )}
+            );
+          })}
+        </div>
+      </div>
 
-      {/* ── CULTURAL CALENDAR VIEW ────────────────────────────────────────── */}
-      {viewMode === "cultural" && (
-        <>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Star size={11} className="text-gold" /> Cultural observances, wellness days & WVW signature dates</span>
-            <span className="flex items-center gap-1 ml-auto"><Moon size={11} className="text-blue-500" /> {CULTURAL_EVENTS.filter(e => e.isOffDay).length} off days this year</span>
+      {/* Upcoming list */}
+      <div className="section-card">
+        <div className="section-card-header flex items-center gap-2">
+          <Clock size={14} className="text-gold" />
+          <h2 className="text-sm font-semibold gradient-text-gold">Next 60 Days</h2>
+          <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{upcomingEvents.length}</span>
+        </div>
+        {loading ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading events…</div>
+        ) : upcomingEvents.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon"><Calendar size={24} className="text-muted-foreground/40" /></div>
+            <p className="text-sm font-medium">No upcoming events</p>
+            <p className="text-xs text-muted-foreground mt-1">Schedule meetings, set milestones, and add employees to see events here</p>
           </div>
-
-          {/* Month selector */}
-          <div className="flex flex-wrap gap-1.5">
-            {MONTHS.map((m, i) => {
-              const mn = i + 1;
-              const count = CULTURAL_EVENTS.filter((e) => e.monthNum === mn).length;
+        ) : (
+          <div className="divide-y divide-border">
+            {upcomingEvents.map((evt) => {
+              const cfg = EVENT_CONFIG[evt.type];
+              const Icon = cfg.icon;
+              const dateStr = evt.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+              const timeStr = evt.date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              const showTime = evt.date.getHours() !== 0 || evt.date.getMinutes() !== 0;
               return (
                 <button
-                  key={m}
+                  key={evt.id}
                   type="button"
-                  onClick={() => setCulturalMonth(mn)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                    culturalMonth === mn ? "bg-gold text-white shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80"
-                  )}
+                  onClick={() => setSelectedEvent(evt)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
                 >
-                  {m.slice(0, 3)}
-                  {count > 0 && (
-                    <span className={cn("ml-1.5 text-[10px]", culturalMonth === mn ? "text-white/80" : "text-muted-foreground")}>
-                      {count}
-                    </span>
-                  )}
+                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border", cfg.bg, cfg.border)}>
+                    <Icon size={14} className={cfg.color} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{evt.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{evt.subtitle}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {evt.isOffDay && evt.offType && (
+                      <span className="hidden sm:flex items-center gap-0.5 text-[10px] font-medium text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full">
+                        <Moon size={8} /> {evt.offType}
+                      </span>
+                    )}
+                    {evt.meta && (
+                      <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", cfg.color, cfg.bg, cfg.border)}>
+                        {evt.meta}
+                      </span>
+                    )}
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-foreground">{dateStr}</p>
+                      {showTime && <p className="text-[10px] text-muted-foreground">{timeStr}</p>}
+                    </div>
+                  </div>
                 </button>
               );
             })}
           </div>
+        )}
+      </div>
 
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showOffOnly}
-                onChange={(e) => setShowOffOnly(e.target.checked)}
-                className="w-3.5 h-3.5 rounded accent-gold"
-              />
-              Off days only
-            </label>
-          </div>
-
-          <div className="section-card overflow-hidden">
-            <div className="section-card-header px-5 py-3.5 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">{MONTHS[culturalMonth - 1]}</h2>
-              <span className="text-xs text-muted-foreground">{culturalMonthEvents.length} events</span>
-            </div>
-            {culturalMonthEvents.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">No events match your filters for this month.</div>
-            ) : (
-              <div className="divide-y divide-border/60">
-                {culturalMonthEvents.map((evt, i) => {
-                  const isWvw = evt.notes?.toLowerCase().includes("non-negotiable") ||
-                    evt.notes?.toLowerCase().includes("signature wvw") ||
-                    evt.notes?.toLowerCase().includes("wvw core");
-                  const dateLabel = evt.isVariable ? "Date varies"
-                    : !evt.startDay ? MONTHS[evt.monthNum - 1]
-                    : !evt.endDay ? `${MONTHS[evt.monthNum - 1]} ${evt.startDay}`
-                    : `${MONTHS[evt.monthNum - 1]} ${evt.startDay} – ${evt.endMonthNum ? MONTHS[evt.endMonthNum - 1] : MONTHS[evt.monthNum - 1]} ${evt.endDay}`;
-                  return (
-                    <div key={i} className={cn("px-5 py-4 flex items-start gap-4", evt.isOffDay && "bg-gold/5", isWvw && "bg-purple-500/5")}>
-                      <div className="w-28 flex-shrink-0 text-xs text-muted-foreground leading-relaxed pt-0.5">{dateLabel}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <h3 className={cn("text-sm font-semibold", isWvw && "text-gold")}>{evt.name}</h3>
-                          {evt.priority === "HIGH" && (
-                            <span className="text-[10px] font-bold text-gold bg-gold/10 px-1.5 py-0.5 rounded-full border border-gold/20">HIGH</span>
-                          )}
-                          {evt.isOffDay && (
-                            <span className="flex items-center gap-0.5 text-[10px] font-medium text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full">
-                              <Moon size={9} /> {evt.offType ?? "Off Day"}
-                            </span>
-                          )}
-                          {isWvw && (
-                            <span className="flex items-center gap-0.5 text-[10px] font-bold text-purple-600 bg-purple-500/10 px-1.5 py-0.5 rounded-full">
-                              <Star size={9} /> WVW Signature
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600">{evt.category}</span>
-                          <span className="text-muted-foreground">WVW Use: <span className="text-foreground/80 font-medium">{evt.wvwUseCase}</span></span>
-                        </div>
-                        {evt.notes && <p className="text-[11px] text-muted-foreground mt-1 italic">{evt.notes}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
+      {/* WVW Signature Dates sidebar callout */}
+      <div className="section-card">
+        <div className="section-card-header flex items-center gap-2">
+          <Star size={14} className="text-gold" />
+          <h2 className="text-sm font-semibold">WVW Recurring Quarterly Events</h2>
+        </div>
+        <div className="divide-y divide-border/60">
+          {[
+            { name: "WVW Burnout Reset Week", category: "Wellness", wvwUseCase: "Consulting Offer", isOffDay: true, offType: "Internal Reset Week", notes: "Also client-facing — quarterly" },
+            { name: "WVW Culture Audit Season", category: "Business", wvwUseCase: "Sales + Delivery", isOffDay: false, notes: "Revenue driver — quarterly" },
+            { name: "WVW Leadership Intensive Month", category: "Leadership", wvwUseCase: "Training", isOffDay: false, notes: "Core service — quarterly" },
+          ].map((evt, i) => (
+            <div key={i} className="px-4 py-3 flex items-start gap-3">
+              <div className="w-7 h-7 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center flex-shrink-0">
+                <Star size={12} className="text-gold" />
               </div>
-            )}
-          </div>
-
-          {/* WVW Recurring */}
-          <div className="section-card overflow-hidden">
-            <div className="section-card-header px-5 py-3.5 flex items-center gap-2">
-              <Star size={14} className="text-gold" />
-              <h2 className="text-sm font-semibold">WVW Recurring Dates</h2>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Quarterly</span>
-            </div>
-            <div className="divide-y divide-border/60">
-              {[
-                { name: "WVW Burnout Reset Week", category: "Wellness", wvwUseCase: "Consulting Offer", isOffDay: true, offType: "Internal Reset Week", notes: "Also client-facing — quarterly" },
-                { name: "WVW Culture Audit Season", category: "Business", wvwUseCase: "Sales + Delivery", isOffDay: false, notes: "Revenue driver — quarterly" },
-                { name: "WVW Leadership Intensive Month", category: "Leadership", wvwUseCase: "Training", isOffDay: false, notes: "Core service — quarterly" },
-              ].map((evt, i) => (
-                <div key={i} className="px-5 py-4 flex items-start gap-4">
-                  <div className="w-28 flex-shrink-0 text-xs text-muted-foreground pt-0.5">Quarterly</div>
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h3 className="text-sm font-semibold text-gold">{evt.name}</h3>
-                      <span className="text-[10px] font-bold text-gold bg-gold/10 px-1.5 py-0.5 rounded-full border border-gold/20">HIGH</span>
-                      {evt.isOffDay && (
-                        <span className="flex items-center gap-0.5 text-[10px] font-medium text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full">
-                          <Moon size={9} /> {evt.offType}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-600">{evt.category}</span>
-                      <span className="text-muted-foreground">WVW Use: <span className="text-foreground/80 font-medium">{evt.wvwUseCase}</span></span>
-                    </div>
-                    {evt.notes && <p className="text-[11px] text-muted-foreground mt-1 italic">{evt.notes}</p>}
-                  </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <p className="text-xs font-semibold text-gold">{evt.name}</p>
+                  {evt.isOffDay && (
+                    <span className="flex items-center gap-0.5 text-[10px] text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded-full">
+                      <Moon size={8} /> {evt.offType}
+                    </span>
+                  )}
                 </div>
-              ))}
+                <p className="text-[11px] text-muted-foreground">{evt.notes}</p>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

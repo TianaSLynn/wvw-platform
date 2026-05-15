@@ -36,7 +36,6 @@ export async function GET(
           select: {
             id: true, title: true, sortOrder: true,
             checklistItems: {
-              where: { guidance: { contains: "scale:1-5" } },
               orderBy: { sortOrder: "asc" },
               select: {
                 id: true, question: true, guidance: true,

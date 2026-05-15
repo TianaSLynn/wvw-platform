@@ -11,11 +11,13 @@ const STEP_STATUSES = ["PENDING","IN_PROGRESS","COMPLETED","SKIPPED","BLOCKED"] 
 const STEP_CATEGORIES = ["HR","IT","TRAINING","CULTURE","LEGAL","INTRO","GENERAL"] as const;
 
 const updateStepSchema = z.object({
-  stepId:       z.string(),
-  status:       z.enum(STEP_STATUSES).optional(),
-  notes:        z.string().nullable().optional(),
-  dueDate:      z.string().nullable().optional(),
-  assignedToId: z.string().nullable().optional(),
+  stepId:            z.string(),
+  status:            z.enum(STEP_STATUSES).optional(),
+  notes:             z.string().nullable().optional(),
+  dueDate:           z.string().nullable().optional(),
+  assignedToId:      z.string().nullable().optional(),
+  documentCollected: z.boolean().optional(),
+  documentNote:      z.string().nullable().optional(),
 });
 
 const addStepSchema = z.object({
@@ -40,7 +42,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const parsed = updateStepSchema.safeParse(body);
     if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
 
-    const { stepId, status, notes, dueDate, assignedToId } = parsed.data;
+    const { stepId, status, notes, dueDate, assignedToId, documentCollected, documentNote } = parsed.data;
 
     // Prevent completing a blocked step
     if (status === "COMPLETED" || status === "IN_PROGRESS") {
@@ -60,9 +62,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           status,
           completedAt: status === "COMPLETED" ? new Date() : null,
         } : {}),
-        ...(notes        !== undefined ? { notes }                          : {}),
-        ...(assignedToId !== undefined ? { assignedToId: assignedToId || null } : {}),
-        ...(dueDate      !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
+        ...(notes              !== undefined ? { notes }                               : {}),
+        ...(assignedToId       !== undefined ? { assignedToId: assignedToId || null }  : {}),
+        ...(dueDate            !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
+        ...(documentCollected  !== undefined ? { documentCollected }                   : {}),
+        ...(documentNote       !== undefined ? { documentNote: documentNote || null }  : {}),
       },
     });
 

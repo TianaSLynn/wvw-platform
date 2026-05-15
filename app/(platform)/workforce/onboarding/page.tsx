@@ -4,15 +4,15 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, UserPlus, CheckCircle, Circle, Clock, AlertCircle,
-  Plus, X, Users, Building2, GraduationCap,
+  Plus, X, Users, Building2, GraduationCap, Mic2,
   BookOpen, Shield, Cpu, Smile, FileCheck, SkipForward,
-  Loader2, RefreshCw, Lock,
+  Loader2, RefreshCw, Lock, FileText, PackageCheck, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type EntityType = "EMPLOYEE" | "CLIENT" | "STUDENT";
+type EntityType = "EMPLOYEE" | "CLIENT" | "STUDENT" | "INSTRUCTOR";
 type StepStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
 type WorkflowType = "ONBOARDING" | "OFFBOARDING";
 
@@ -27,6 +27,10 @@ type Step = {
   completedAt?: string | null;
   notes?: string | null;
   blockedByStepId?: string | null;
+  documentRequired?: boolean;
+  documentLabel?: string | null;
+  documentCollected?: boolean;
+  documentNote?: string | null;
   assignedTo?: { firstName: string; lastName: string } | null;
 };
 
@@ -59,9 +63,10 @@ type Client = { id: string; name: string; industry?: string | null };
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const ENTITY_CONFIG: Record<EntityType, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  EMPLOYEE: { label: "Employee",  icon: Users,          color: "text-blue-600",    bg: "bg-blue-500/10" },
-  CLIENT:   { label: "Client",    icon: Building2,      color: "text-gold",        bg: "bg-gold/10" },
-  STUDENT:  { label: "Student",   icon: GraduationCap,  color: "text-violet-600",  bg: "bg-violet-500/10" },
+  EMPLOYEE:   { label: "Employee",   icon: Users,         color: "text-blue-600",    bg: "bg-blue-500/10" },
+  CLIENT:     { label: "Client",     icon: Building2,     color: "text-gold",        bg: "bg-gold/10" },
+  STUDENT:    { label: "Student",    icon: GraduationCap, color: "text-violet-600",  bg: "bg-violet-500/10" },
+  INSTRUCTOR: { label: "Instructor", icon: Mic2,          color: "text-emerald-600", bg: "bg-emerald-500/10" },
 };
 
 const STEP_STATUS_CONFIG: Record<StepStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -92,6 +97,8 @@ type CreateForm = {
   clientId: string;
   studentName: string;
   studentEmail: string;
+  instructorName: string;
+  instructorEmail: string;
   type: "ONBOARDING" | "OFFBOARDING";
   targetDate: string;
   notes: string;
@@ -101,6 +108,7 @@ type CreateForm = {
 const DEFAULT_FORM: CreateForm = {
   entityType: "EMPLOYEE", employeeId: "", clientId: "",
   studentName: "", studentEmail: "",
+  instructorName: "", instructorEmail: "",
   type: "ONBOARDING", targetDate: "", notes: "", useTemplate: true,
 };
 

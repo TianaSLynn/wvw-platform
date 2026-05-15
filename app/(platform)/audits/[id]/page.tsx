@@ -71,7 +71,7 @@ export default async function AuditDetailPage({
     INFORMATIONAL: audit.findings.filter((f) => f.severity === "INFORMATIONAL").length,
   };
 
-  const validTabs = ["checklist", "findings", "evidence", "team", "overview"] as const;
+  const validTabs = ["checklist", "findings", "evidence", "tracker", "team", "overview", "survey", "results"] as const;
   type Tab = typeof validTabs[number];
   const tab = validTabs.includes(initialTab as Tab) ? (initialTab as Tab) : undefined;
 

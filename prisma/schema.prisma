@@ -1436,6 +1436,9 @@ model Employee {
   employmentType    String           @default("full-time") // "full-time"|"part-time"|"contract"|"intern"
   startDate         DateTime?
   endDate           DateTime?
+  dateOfBirth       DateTime?        @db.Date
+  promotionDate     DateTime?
+  previousTitle     String?
   level             String?          // "IC1","IC2","M1","Director","VP"
   band              String?          // compensation band
 
@@ -2004,6 +2007,12 @@ model OnboardingStep {
   status       WorkflowStepStatus  @default(PENDING)
   completedAt  DateTime?
   notes        String?             @db.Text
+
+  // Document collection tracking
+  documentRequired  Boolean  @default(false)  // does this step require a document to be collected?
+  documentLabel     String?                   // e.g. "Signed NDA", "I-9 Form Section 1 & 2"
+  documentCollected Boolean  @default(false)  // has the document been received?
+  documentNote      String?  @db.Text         // who provided it / where it's stored
 
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt

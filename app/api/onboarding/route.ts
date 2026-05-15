@@ -6,11 +6,11 @@
 import { db } from "@/lib/db";
 import { ok, created, unauthorized, badRequest, serverError } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth";
-import { createOnboardingWorkflow } from "@/lib/onboarding-service";
+import { createOnboardingWorkflow, CreateWorkflowInput } from "@/lib/onboarding-service";
 import { z } from "zod";
 
 const createSchema = z.object({
-  entityType:   z.enum(["EMPLOYEE", "CLIENT", "STUDENT"]).default("EMPLOYEE"),
+  entityType:   z.enum(["EMPLOYEE", "CLIENT", "STUDENT", "INSTRUCTOR"]).default("EMPLOYEE"),
   employeeId:   z.string().optional(),
   clientId:     z.string().optional(),
   studentName:  z.string().optional(),

@@ -9,7 +9,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateSurveyToken } from "@/lib/survey-token";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -24,8 +24,9 @@ export async function POST(
     if (!audit) return notFound("Audit");
 
     const token = generateSurveyToken(auditId);
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-    const surveyUrl = `${baseUrl}/survey/${token}`;
+    const origin = process.env.NEXT_PUBLIC_APP_URL
+      ?? `${new URL(req.url).protocol}//${new URL(req.url).host}`;
+    const surveyUrl = `${origin}/survey/${token}`;
 
     return ok({ token, surveyUrl, auditName: audit.name, clientName: audit.client?.name });
   } catch (e) { return serverError(e); }

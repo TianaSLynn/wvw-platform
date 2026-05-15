@@ -43,6 +43,23 @@ function parseGuidanceHint(guidance: string | null): string | null {
 }
 
 export default function SurveyClient({ survey, token }: { survey: SurveyData; token: string }) {
+  if (survey.totalQuestions === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle size={22} className="text-amber-600" />
+          </div>
+          <h2 className="text-lg font-bold mb-2">Survey Not Yet Available</h2>
+          <p className="text-sm text-gray-500">
+            This survey has no questions configured yet. The audit team is still building the checklist. Please check back later or contact your WVW consultant.
+          </p>
+          <p className="text-xs text-gray-400 mt-4">Audit: <span className="font-medium">{survey.audit.name}</span></p>
+        </div>
+      </div>
+    );
+  }
+
   const [step, setStep] = useState<"intro" | "survey" | "done">("intro");
   const [sectionIdx, setSectionIdx] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
