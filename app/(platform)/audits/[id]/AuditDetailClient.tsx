@@ -11,7 +11,7 @@ import {
   Plus, FileText, Users, Shield, ClipboardList, TrendingUp,
   ArrowRight, CheckSquare, Eye, Send, Copy, ExternalLink, BarChart3,
   Upload, Link2, StickyNote, X, Download, Cloud,
-  Building2, Briefcase, FolderCheck,
+  Building2, Briefcase, FolderCheck, Sparkles, Loader2, RefreshCw,
 } from "lucide-react";
 import { MS365FilePicker } from "@/components/ui/MS365FilePicker";
 import { ScoreRing, DomainBarChart, ScoreSummary } from "@/components/ui/ScoringCharts";
@@ -86,6 +86,43 @@ export default function AuditDetailClient({
     new Set(audit.sections.slice(0, 2).map((s) => s.id))
   );
   const [sections, setSections] = useState(audit.sections);
+  const [generatingChecklist, setGeneratingChecklist] = useState(false);
+
+  const generateChecklist = async () => {
+    setGeneratingChecklist(true);
+    try {
+      // Generate sections with AI
+      const genRes = await fetch("/api/ai/generate-checklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          auditType: audit.type,
+          scope: audit.scope ?? undefined,
+          industry: audit.client?.name ? undefined : undefined,
+          frameworks: audit.frameworks?.map((f: { framework: { name: string } }) => f.framework.name) ?? [],
+          objectives: audit.objectives ?? [],
+        }),
+      });
+      if (!genRes.ok) throw new Error("Generation failed");
+      const { data: checklist } = await genRes.json();
+
+      // Save sections to audit
+      const saveRes = await fetch(`/api/audits/${audit.id}/sections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sections: checklist.sections, replace: true }),
+      });
+      if (!saveRes.ok) throw new Error("Save failed");
+      const { data: updated } = await saveRes.json();
+      setSections(updated.sections ?? []);
+      showToast("AI checklist generated and saved!");
+      startTransition(() => router.refresh());
+    } catch {
+      showToast("Failed to generate checklist. Try again.");
+    } finally {
+      setGeneratingChecklist(false);
+    }
+  };
   const [toast, setToast] = useState<string | null>(null);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -234,7 +271,7 @@ export default function AuditDetailClient({
       <div className="animate-slide-in-right">
         {tab === "overview" && <OverviewTab audit={audit} />}
         {tab === "checklist" && (
-          <ChecklistTab sections={sections} auditId={audit.id} onRespond={respondToItem} />
+          <ChecklistTab sections={sections} auditId={audit.id} onRespond={respondToItem} onGenerate={generateChecklist} generating={generatingChecklist} />
         )}
         {tab === "findings"  && <FindingsTab findings={audit.findings} auditId={audit.id} />}
         {tab === "evidence"  && <EvidenceTab evidence={audit.evidence} auditId={audit.id} />}
@@ -299,16 +336,41 @@ function OverviewTab({ audit }: { audit: Audit }) {
 
 // ─── Checklist Tab ────────────────────────────────────────────────────────────
 function ChecklistTab({
-  sections, auditId, onRespond,
+  sections, auditId, onRespond, onGenerate, generating,
 }: {
   sections: Section[];
   auditId: string;
   onRespond: (sectionId: string, itemId: string, response: string, notes?: string) => void;
+  onGenerate: () => void;
+  generating: boolean;
 }) {
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(sections.slice(0, 2).map((s) => s.id))
   );
+
+  if (sections.length === 0) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-12 text-center shadow-card">
+        <div className="w-12 h-12 bg-gold/10 border border-gold/20 rounded-xl flex items-center justify-center mx-auto mb-4">
+          <Sparkles size={22} className="text-gold" />
+        </div>
+        <p className="font-semibold mb-1">No checklist yet</p>
+        <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
+          Generate an AI-powered checklist based on this audit's type, scope, and frameworks — or add sections manually.
+        </p>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={generating}
+          className="btn-primary inline-flex items-center gap-2"
+        >
+          {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          {generating ? "Generating…" : "Generate AI Checklist"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

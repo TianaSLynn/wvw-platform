@@ -13,7 +13,7 @@ export async function POST(
 
   const { id: auditId } = await params;
 
-  // Fetch the audit + all Likert checklist items
+  // Fetch the audit + all checklist items (no guidance filter — score everything)
   const audit = await db.audit.findFirst({
     where: { id: auditId, orgId: user.orgId },
     select: {
@@ -23,7 +23,6 @@ export async function POST(
           id: true,
           title: true,
           checklistItems: {
-            where: { guidance: { contains: "scale:1-5" } },
             select: {
               id: true,
               guidance: true,
@@ -37,7 +36,7 @@ export async function POST(
 
   if (!audit) return badRequest("Audit not found");
 
-  // Flatten items with section metadata
+  // Flatten ALL items — scoring handles both Likert (1-5) and yes/no responses
   const items: ChecklistItemMeta[] = [];
   for (const section of audit.sections) {
     for (const item of section.checklistItems) {
@@ -52,7 +51,7 @@ export async function POST(
   }
 
   if (items.length === 0) {
-    return badRequest("No Likert questions found in this audit");
+    return badRequest("This audit has no checklist items. Add sections and questions first.");
   }
 
   // Fetch all survey responses
