@@ -1,29 +1,39 @@
 /**
  * POST /api/audits/[id]/sections
- * Add AI-generated or manual sections + checklist items to an existing audit.
+ * Add AI-generated, WVW-template, or manual sections + checklist items to an existing audit.
+ * Accepts full WVW metadata on each item.
  */
 import { db } from "@/lib/db";
 import { ok, unauthorized, notFound, badRequest, serverError } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 const itemSchema = z.object({
-  question: z.string().min(1),
-  guidance: z.string().optional().nullable(),
-  riskWeight: z.number().default(1.0),
-  isRequired: z.boolean().default(false),
+  question:         z.string().min(1),
+  guidance:         z.string().optional().nullable(),
+  riskWeight:       z.number().default(1.0),
+  isRequired:       z.boolean().default(false),
   evidenceRequired: z.boolean().default(false),
+  // WVW Intelligence Engine metadata
+  qId:             z.string().optional().nullable(),
+  questionType:    z.string().optional().nullable(),
+  reverseScored:   z.boolean().optional().nullable(),
+  riskTag:         z.string().optional().nullable(),
+  pathwayTriggers: z.array(z.string()).optional().default([]),
+  industryTags:    z.array(z.string()).optional().default([]),
+  scenarioOptions: z.unknown().optional().nullable(),
 });
 
 const sectionSchema = z.object({
-  title: z.string().min(1),
+  title:       z.string().min(1),
   description: z.string().optional().nullable(),
-  items: z.array(itemSchema),
+  items:       z.array(itemSchema),
 });
 
 const bodySchema = z.object({
   sections: z.array(sectionSchema),
-  replace: z.boolean().default(false), // if true, delete existing sections first
+  replace:  z.boolean().default(false),
 });
 
 export async function POST(
@@ -45,7 +55,6 @@ export async function POST(
     const { sections, replace } = parsed.data;
     if (sections.length === 0) return badRequest("No sections provided");
 
-    // Get current max sortOrder
     const existing = await db.auditSection.findMany({
       where: { auditId },
       select: { sortOrder: true },
@@ -56,7 +65,6 @@ export async function POST(
 
     await db.$transaction(async (tx) => {
       if (replace) {
-        // Delete all existing sections and their items (cascade)
         await tx.auditSection.deleteMany({ where: { auditId } });
       }
 
@@ -65,17 +73,27 @@ export async function POST(
         await tx.auditSection.create({
           data: {
             auditId,
-            title: sec.title,
+            title:       sec.title,
             description: sec.description ?? null,
-            sortOrder: startSort + si,
+            sortOrder:   startSort + si,
             checklistItems: {
               create: sec.items.map((item, ii) => ({
-                question: item.question,
-                guidance: item.guidance ?? null,
-                riskWeight: item.riskWeight,
-                isRequired: item.isRequired,
+                question:         item.question,
+                guidance:         item.guidance ?? null,
+                riskWeight:       item.riskWeight,
+                isRequired:       item.isRequired,
                 evidenceRequired: item.evidenceRequired,
-                sortOrder: ii,
+                sortOrder:        ii,
+                // WVW metadata
+                qId:             item.qId ?? null,
+                questionType:    item.questionType ?? "Likert",
+                reverseScored:   item.reverseScored ?? false,
+                riskTag:         item.riskTag ?? null,
+                pathwayTriggers: item.pathwayTriggers ?? [],
+                industryTags:    item.industryTags ?? [],
+                scenarioOptions: item.scenarioOptions != null
+                  ? (item.scenarioOptions as Prisma.InputJsonValue)
+                  : Prisma.JsonNull,
               })),
             },
           },
@@ -87,7 +105,12 @@ export async function POST(
       where: { id: auditId },
       include: {
         sections: {
-          include: { checklistItems: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            checklistItems: {
+              orderBy: { sortOrder: "asc" },
+              include: { evidence: { select: { id: true, title: true, type: true } } },
+            },
+          },
           orderBy: { sortOrder: "asc" },
         },
       },

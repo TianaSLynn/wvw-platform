@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Shield, Users, Building2, Activity, Plug, UserPlus, Clock } from "lucide-react";
 import Link from "next/link";
 import { formatDate, cn } from "@/lib/utils";
+import SystemControlPanel from "@/components/admin/SystemControlPanel";
 
 export const metadata: Metadata = { title: "Admin Panel" };
 
@@ -115,6 +116,9 @@ export default async function AdminPage() {
           </Link>
         </div>
       </div>
+
+      {/* System Control Panel */}
+      <SystemControlPanel isSuperAdmin={user.role === "SUPER_ADMIN"} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Integrations */}

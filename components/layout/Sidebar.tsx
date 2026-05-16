@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/app-version";
 import type { User, Organization } from "@prisma/client";
 import {
   LayoutDashboard, Users, ClipboardList, BookOpen,
@@ -227,7 +228,7 @@ export default function Sidebar({ user, mobileOpen = false, onClose }: SidebarPr
         </div>
 
         <div className="px-5 py-2 border-t border-white/5">
-          <p className="text-white/20 text-[10px]">v2.0.0 — Wholistic Vibes Wellness</p>
+          <p className="text-white/20 text-[10px]">v{APP_VERSION} — Wholistic Vibes Wellness</p>
         </div>
       </aside>
     </>

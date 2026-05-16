@@ -11,10 +11,12 @@ import {
   Plus, FileText, Users, Shield, ClipboardList, TrendingUp,
   ArrowRight, CheckSquare, Eye, Send, Copy, ExternalLink, BarChart3,
   Upload, Link2, StickyNote, X, Download, Cloud,
-  Building2, Briefcase, FolderCheck, Sparkles, Loader2, RefreshCw,
+  Building2, Briefcase, FolderCheck, Sparkles, Loader2, RefreshCw, BookOpen,
 } from "lucide-react";
 import { MS365FilePicker } from "@/components/ui/MS365FilePicker";
 import { ScoreRing, DomainBarChart, ScoreSummary } from "@/components/ui/ScoringCharts";
+
+type ScenarioOption = { letter: string; text: string; score: number };
 
 type ChecklistItem = {
   id: string; question: string; guidance: string | null;
@@ -22,6 +24,13 @@ type ChecklistItem = {
   isCompleted: boolean; riskWeight: number; isRequired: boolean;
   evidenceRequired: boolean; sortOrder: number;
   evidence: Array<{ id: string; title: string; type: string }>;
+  // WVW Intelligence metadata
+  qId?: string | null;
+  questionType?: string | null;
+  reverseScored?: boolean | null;
+  riskTag?: string | null;
+  pathwayTriggers?: string[];
+  scenarioOptions?: ScenarioOption[] | null | unknown;
 };
 
 type Section = {
@@ -87,26 +96,43 @@ export default function AuditDetailClient({
   );
   const [sections, setSections] = useState(audit.sections);
   const [generatingChecklist, setGeneratingChecklist] = useState(false);
+  const [wvwTemplates, setWvwTemplates] = useState<Array<{ id: string; name: string; description: string | null; _count: { sections: number } }>>([]);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
 
-  const generateChecklist = async () => {
-    setGeneratingChecklist(true);
+  const loadTemplates = async () => {
+    if (wvwTemplates.length > 0) { setShowTemplatePicker(true); return; }
+    setLoadingTemplates(true);
     try {
-      // Generate sections with AI
+      const res = await fetch("/api/ai/generate-checklist");
+      if (res.ok) {
+        const { data } = await res.json();
+        setWvwTemplates(data ?? []);
+      }
+    } finally {
+      setLoadingTemplates(false);
+      setShowTemplatePicker(true);
+    }
+  };
+
+  const generateChecklist = async (templateId?: string) => {
+    setGeneratingChecklist(true);
+    setShowTemplatePicker(false);
+    try {
       const genRes = await fetch("/api/ai/generate-checklist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           auditType: audit.type,
           scope: audit.scope ?? undefined,
-          industry: audit.client?.name ? undefined : undefined,
           frameworks: audit.frameworks?.map((f: { framework: { name: string } }) => f.framework.name) ?? [],
           objectives: [],
+          templateId,
         }),
       });
       if (!genRes.ok) throw new Error("Generation failed");
       const { data: checklist } = await genRes.json();
 
-      // Save sections to audit
       const saveRes = await fetch(`/api/audits/${audit.id}/sections`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -115,7 +141,8 @@ export default function AuditDetailClient({
       if (!saveRes.ok) throw new Error("Save failed");
       const { data: updated } = await saveRes.json();
       setSections(updated.sections ?? []);
-      showToast("AI checklist generated and saved!");
+      const source = checklist.source === "wvw-template" ? `Loaded: ${checklist.templateName}` : "AI checklist generated";
+      showToast(`${source} — saved successfully!`);
       startTransition(() => router.refresh());
     } catch {
       showToast("Failed to generate checklist. Try again.");
@@ -271,7 +298,18 @@ export default function AuditDetailClient({
       <div className="animate-slide-in-right">
         {tab === "overview" && <OverviewTab audit={audit} />}
         {tab === "checklist" && (
-          <ChecklistTab sections={sections} auditId={audit.id} onRespond={respondToItem} onGenerate={generateChecklist} generating={generatingChecklist} />
+          <ChecklistTab
+            sections={sections}
+            auditId={audit.id}
+            onRespond={respondToItem}
+            onGenerate={generateChecklist}
+            generating={generatingChecklist}
+            wvwTemplates={wvwTemplates}
+            showTemplatePicker={showTemplatePicker}
+            onPickerOpen={loadTemplates}
+            onPickerClose={() => setShowTemplatePicker(false)}
+            loadingTemplates={loadingTemplates}
+          />
         )}
         {tab === "findings"  && <FindingsTab findings={audit.findings} auditId={audit.id} />}
         {tab === "evidence"  && <EvidenceTab evidence={audit.evidence} auditId={audit.id} />}
@@ -337,12 +375,18 @@ function OverviewTab({ audit }: { audit: Audit }) {
 // ─── Checklist Tab ────────────────────────────────────────────────────────────
 function ChecklistTab({
   sections, auditId, onRespond, onGenerate, generating,
+  wvwTemplates, showTemplatePicker, onPickerOpen, onPickerClose, loadingTemplates,
 }: {
   sections: Section[];
   auditId: string;
   onRespond: (sectionId: string, itemId: string, response: string, notes?: string) => void;
-  onGenerate: () => void;
+  onGenerate: (templateId?: string) => void;
   generating: boolean;
+  wvwTemplates: Array<{ id: string; name: string; description: string | null; _count: { sections: number } }>;
+  showTemplatePicker: boolean;
+  onPickerOpen: () => void;
+  onPickerClose: () => void;
+  loadingTemplates: boolean;
 }) {
   const [activeItem, setActiveItem] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -351,23 +395,60 @@ function ChecklistTab({
 
   if (sections.length === 0) {
     return (
-      <div className="bg-card rounded-xl border border-border p-12 text-center shadow-card">
-        <div className="w-12 h-12 bg-gold/10 border border-gold/20 rounded-xl flex items-center justify-center mx-auto mb-4">
-          <Sparkles size={22} className="text-gold" />
+      <div className="space-y-4">
+        {showTemplatePicker && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onPickerClose}>
+            <div className="bg-card rounded-2xl border border-border shadow-xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">Select WVW Audit Template</h3>
+                <button type="button" onClick={onPickerClose} aria-label="Close template picker" className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+              </div>
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                {wvwTemplates.filter((t) => t.name.startsWith("WVW")).map((t) => (
+                  <button key={t.id} type="button" onClick={() => onGenerate(t.id)}
+                    className="w-full text-left p-4 rounded-xl border border-border hover:border-gold/40 hover:bg-gold/5 transition-colors">
+                    <p className="font-semibold text-sm">{t.name}</p>
+                    {t.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.description}</p>}
+                    <p className="text-[10px] text-gold/70 mt-1">{t._count.sections} sections</p>
+                  </button>
+                ))}
+                {wvwTemplates.filter((t) => !t.name.startsWith("WVW")).length > 0 && (
+                  <>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest px-1 pt-2">Framework Templates</p>
+                    {wvwTemplates.filter((t) => !t.name.startsWith("WVW")).map((t) => (
+                      <button key={t.id} type="button" onClick={() => onGenerate(t.id)}
+                        className="w-full text-left p-4 rounded-xl border border-border hover:border-gold/40 hover:bg-gold/5 transition-colors">
+                        <p className="font-semibold text-sm">{t.name}</p>
+                        <p className="text-[10px] text-gold/70 mt-1">{t._count.sections} sections</p>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="bg-card rounded-xl border border-border p-12 text-center shadow-card">
+          <div className="w-12 h-12 bg-gold/10 border border-gold/20 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Sparkles size={22} className="text-gold" />
+          </div>
+          <p className="font-semibold mb-1">No checklist yet</p>
+          <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
+            Load a WVW Intelligence™ audit template with pre-built questions, or generate a custom AI checklist.
+          </p>
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <button type="button" onClick={onPickerOpen} disabled={generating || loadingTemplates}
+              className="btn-gold inline-flex items-center gap-2">
+              {loadingTemplates ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
+              {loadingTemplates ? "Loading…" : "Load WVW Template"}
+            </button>
+            <button type="button" onClick={() => onGenerate()} disabled={generating}
+              className="btn-ghost inline-flex items-center gap-2">
+              {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {generating ? "Generating…" : "AI Generate"}
+            </button>
+          </div>
         </div>
-        <p className="font-semibold mb-1">No checklist yet</p>
-        <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
-          Generate an AI-powered checklist based on this audit's type, scope, and frameworks — or add sections manually.
-        </p>
-        <button
-          type="button"
-          onClick={onGenerate}
-          disabled={generating}
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {generating ? "Generating…" : "Generate AI Checklist"}
-        </button>
       </div>
     );
   }
@@ -431,21 +512,42 @@ function ChecklistTab({
   );
 }
 
-// Detects WVW Likert questions from the guidance metadata string
-function isLikertItem(guidance: string | null): boolean {
-  return !!guidance && guidance.includes("scale:1-5");
+type QuestionRenderType = "likert" | "scenario" | "evidence" | "yesno";
+
+function getQuestionRenderType(item: ChecklistItem): QuestionRenderType {
+  const qt = item.questionType?.toLowerCase();
+  if (qt === "scenario" || qt === "multiplechoice") return "scenario";
+  if (qt === "evidence") return "evidence";
+  if (qt === "likert" || qt === "frequency" || qt === "severity" || qt === "confidence" || qt === "matrix") return "likert";
+  if (qt === "hiddentrigger" || qt === "contradiction") return "likert";
+  // Legacy: detect from guidance string
+  if (item.guidance?.includes("scale:1-5")) return "likert";
+  return "yesno";
 }
 
-// Parse human-readable hint from WVW guidance string
-function parseGuidanceHint(guidance: string | null): string | null {
-  if (!guidance) return null;
-  if (!guidance.includes("code:")) return guidance;
-  const riskMatch = guidance.match(/risk:([^\s|]+)/);
-  const reverseMatch = guidance.includes("reverse:true");
+function getScenarioOptions(item: ChecklistItem): ScenarioOption[] {
+  if (Array.isArray(item.scenarioOptions)) return item.scenarioOptions as ScenarioOption[];
+  return [
+    { letter: "A", text: "Act immediately and transparently", score: 100 },
+    { letter: "B", text: "Acknowledge but delay action",        score: 75 },
+    { letter: "C", text: "Downplay or minimize the issue",      score: 25 },
+    { letter: "D", text: "Take no action",                      score: 0 },
+  ];
+}
+
+function parseGuidanceHint(guidance: string | null, item: ChecklistItem): string | null {
   const parts: string[] = [];
-  if (riskMatch?.[1]) parts.push(`Risk area: ${riskMatch[1].replace(/-/g, " ")}`);
-  if (reverseMatch) parts.push("Reverse-scored — lower scores indicate stronger risk");
-  return parts.length > 0 ? parts.join(" · ") : null;
+  if (item.riskTag) parts.push(`Risk area: ${item.riskTag.replace(/-/g, " ")}`);
+  if (item.reverseScored) parts.push("Reverse-scored — lower ratings indicate greater risk");
+  if (parts.length > 0) return parts.join(" · ");
+  // Legacy guidance string parsing
+  if (!guidance || guidance.includes("code:")) {
+    const riskMatch = guidance?.match(/risk:([^\s|]+)/);
+    if (riskMatch?.[1]) parts.push(`Risk area: ${riskMatch[1].replace(/-/g, " ")}`);
+    if (guidance?.includes("reverse:true")) parts.push("Reverse-scored — lower scores indicate stronger risk");
+    return parts.length > 0 ? parts.join(" · ") : null;
+  }
+  return guidance;
 }
 
 const LIKERT_LABELS: Record<string, string> = {
@@ -464,6 +566,13 @@ const LIKERT_COLORS: Record<string, string> = {
   "5": "bg-green-500/15 text-green-500 border-green-500/30",
 };
 
+const SCENARIO_COLORS: Record<string, string> = {
+  A: "bg-green-500/15 text-green-600 border-green-500/30",
+  B: "bg-blue-500/15 text-blue-600 border-blue-500/30",
+  C: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  D: "bg-red-500/15 text-red-600 border-red-500/30",
+};
+
 function ChecklistItemRow({
   item, isActive, onToggle, onRespond,
 }: {
@@ -473,29 +582,46 @@ function ChecklistItemRow({
   onRespond: (response: string, notes?: string) => void;
 }) {
   const [notes, setNotes] = useState(item.notes ?? "");
-  const isLikert = isLikertItem(item.guidance);
+  const renderType = getQuestionRenderType(item);
+  const scenarioOpts = renderType === "scenario" ? getScenarioOptions(item) : [];
+
+  const responseLabel = (() => {
+    if (!item.response) return null;
+    if (renderType === "likert" && LIKERT_LABELS[item.response])
+      return `${item.response}/5 — ${LIKERT_LABELS[item.response]}`;
+    if (renderType === "scenario") {
+      const opt = scenarioOpts.find((o) => o.letter === item.response?.toUpperCase());
+      return opt ? `${opt.letter}: ${opt.text.slice(0, 40)}…` : `→ ${item.response}`;
+    }
+    return `→ ${item.response}`;
+  })();
+
+  const responseColor = (() => {
+    if (renderType === "likert") return LIKERT_COLORS[item.response ?? ""] ?? "";
+    if (renderType === "scenario") return SCENARIO_COLORS[item.response?.toUpperCase() ?? ""] ?? "";
+    return RESPONSE_COLORS[item.response ?? ""] ?? "";
+  })();
 
   return (
     <div className={cn("transition-colors", isActive ? "bg-muted/30" : "hover:bg-muted/10")}>
       <div className="flex items-start gap-3 px-5 py-3">
-        {/* Completion icon */}
-        <button onClick={onToggle} className="mt-0.5 flex-shrink-0">
+        <button type="button" onClick={onToggle} aria-label="Toggle item" className="mt-0.5 flex-shrink-0">
           {item.isCompleted
             ? <CheckCircle2 size={18} className="text-green-500" />
             : <Circle size={18} className="text-muted-foreground" />}
         </button>
 
-        {/* Question */}
         <div className="flex-1 min-w-0">
-          <p className={cn("text-sm", item.isCompleted ? "text-muted-foreground line-through" : "text-foreground")}>
-            {item.question}
-            {item.isRequired && <span className="text-red-400 ml-1">*</span>}
-          </p>
-          {item.response && (
-            <span className={cn("text-xs font-semibold capitalize", LIKERT_COLORS[item.response] ?? RESPONSE_COLORS[item.response])}>
-              {["1","2","3","4","5"].includes(item.response)
-                ? `${item.response}/5 — ${LIKERT_LABELS[item.response]}`
-                : `→ ${item.response}`}
+          <div className="flex items-start gap-2">
+            {item.qId && <span className="text-[9px] font-mono text-muted-foreground/50 mt-0.5 flex-shrink-0">{item.qId}</span>}
+            <p className={cn("text-sm", item.isCompleted ? "text-muted-foreground line-through" : "text-foreground")}>
+              {item.question}
+              {item.isRequired && <span className="text-red-400 ml-1">*</span>}
+            </p>
+          </div>
+          {responseLabel && (
+            <span className={cn("text-xs font-semibold capitalize mt-0.5 inline-block", responseColor)}>
+              {responseLabel}
             </span>
           )}
           {item.notes && !isActive && (
@@ -509,21 +635,24 @@ function ChecklistItemRow({
           )}
         </div>
 
-        {/* Risk weight */}
-        {item.riskWeight > 1 && (
-          <div className="flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {item.riskTag && (
+            <span className="text-[9px] font-medium text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded hidden sm:block">
+              {item.riskTag}
+            </span>
+          )}
+          {item.riskWeight > 1 && (
             <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
               ×{item.riskWeight.toFixed(1)}
             </span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Expanded response area */}
       {isActive && (
         <div className="px-5 pb-4 ml-9 space-y-3">
           {(() => {
-            const hint = parseGuidanceHint(item.guidance);
+            const hint = parseGuidanceHint(item.guidance, item);
             return hint ? (
               <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 border border-border">
                 💡 {hint}
@@ -531,66 +660,87 @@ function ChecklistItemRow({
             ) : null;
           })()}
 
-          {/* Response buttons — Likert 1–5 for WVW survey items, yes/no/partial/n/a for standard */}
-          {isLikert ? (
+          {/* Likert 1–5 */}
+          {renderType === "likert" && (
             <div className="space-y-1.5">
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Rate 1–5</p>
               <div className="flex items-center gap-2 flex-wrap">
                 {(["1","2","3","4","5"] as const).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => onRespond(r, notes || undefined)}
+                  <button key={r} type="button" onClick={() => onRespond(r, notes || undefined)}
                     className={cn(
                       "flex flex-col items-center px-3 py-2 rounded-lg text-xs font-semibold border transition-colors min-w-[60px]",
-                      item.response === r
-                        ? LIKERT_COLORS[r]
-                        : "border-border text-muted-foreground hover:border-foreground/30"
-                    )}
-                  >
+                      item.response === r ? LIKERT_COLORS[r] : "border-border text-muted-foreground hover:border-foreground/30"
+                    )}>
                     <span className="text-base font-bold">{r}</span>
                     <span className="text-[9px] leading-tight text-center mt-0.5">{LIKERT_LABELS[r]}</span>
                   </button>
                 ))}
               </div>
             </div>
-          ) : (
+          )}
+
+          {/* Scenario A/B/C/D */}
+          {renderType === "scenario" && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Select the best response</p>
+              <div className="space-y-2">
+                {scenarioOpts.map((opt) => (
+                  <button key={opt.letter} type="button" onClick={() => onRespond(opt.letter, notes || undefined)}
+                    className={cn(
+                      "w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border text-sm transition-colors",
+                      item.response === opt.letter
+                        ? SCENARIO_COLORS[opt.letter]
+                        : "border-border text-muted-foreground hover:border-foreground/20"
+                    )}>
+                    <span className="font-bold flex-shrink-0">{opt.letter}.</span>
+                    <span>{opt.text}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Evidence yes/no */}
+          {renderType === "evidence" && (
+            <div className="flex items-center gap-2">
+              {(["yes","no"] as const).map((r) => (
+                <button key={r} type="button" onClick={() => onRespond(r, notes || undefined)}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-semibold border transition-colors capitalize",
+                    item.response === r
+                      ? r === "yes" ? "bg-green-500/15 text-green-600 border-green-500/30" : "bg-red-500/15 text-red-600 border-red-500/30"
+                      : "border-border text-muted-foreground hover:border-foreground/30"
+                  )}>
+                  {r === "yes" ? "Evidence Provided" : "Not Yet"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Yes/No/Partial/N-A */}
+          {renderType === "yesno" && (
             <div className="flex items-center gap-2 flex-wrap">
               {(["yes","no","partial","n/a"] as const).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => onRespond(r, notes || undefined)}
+                <button key={r} type="button" onClick={() => onRespond(r, notes || undefined)}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors capitalize",
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors",
                     item.response === r
-                      ? {
-                          yes: "bg-green-500/15 text-green-500 border-green-500/30",
-                          no: "bg-red-500/15 text-red-500 border-red-500/30",
-                          partial: "bg-amber-500/15 text-amber-500 border-amber-500/30",
-                          "n/a": "bg-muted text-muted-foreground border-border",
-                        }[r]
+                      ? { yes: "bg-green-500/15 text-green-500 border-green-500/30", no: "bg-red-500/15 text-red-500 border-red-500/30", partial: "bg-amber-500/15 text-amber-500 border-amber-500/30", "n/a": "bg-muted text-muted-foreground border-border" }[r]
                       : "border-border text-muted-foreground hover:border-foreground/30"
-                  )}
-                >
+                  )}>
                   {r === "n/a" ? "N/A" : r.charAt(0).toUpperCase() + r.slice(1)}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Notes */}
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes... (optional)"
-            rows={2}
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add notes… (optional)" rows={2}
             className="w-full text-xs bg-background border border-border rounded-lg px-3 py-2 text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-gold"
           />
-
           {item.response && (
-            <button
-              onClick={() => onRespond(item.response as never, notes || undefined)}
-              className="text-xs text-gold hover:underline"
-            >
+            <button type="button" onClick={() => onRespond(item.response as string, notes || undefined)}
+              className="text-xs text-gold hover:underline">
               Save notes
             </button>
           )}
@@ -764,6 +914,7 @@ function EvidenceTab({ evidence: initialEvidence, auditId }: { evidence: Evidenc
                   id="ev-file-input"
                   type="file"
                   className="hidden"
+                  aria-label="Upload file"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
                   accept="*/*"
                 />
@@ -816,8 +967,9 @@ function EvidenceTab({ evidence: initialEvidence, auditId }: { evidence: Evidenc
           )}
 
           <div className="flex items-center justify-end gap-2 mt-5">
-            <button onClick={reset} className="btn-ghost text-sm">Cancel</button>
+            <button type="button" onClick={reset} className="btn-ghost text-sm">Cancel</button>
             <button
+              type="button"
               onClick={mode === "link" ? submitLink : submitFile}
               disabled={uploading}
               className="btn-primary text-sm flex items-center gap-1.5"
@@ -998,6 +1150,7 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
 
         {!surveyUrl ? (
           <button
+            type="button"
             onClick={generateLink}
             disabled={loading}
             className="btn-primary flex items-center gap-2"
@@ -1048,6 +1201,7 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
             )}
           </div>
           <button
+            type="button"
             onClick={loadResults}
             disabled={loadingResults}
             className="btn-ghost text-xs"
@@ -1072,6 +1226,7 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
                 <strong className="text-foreground">{responseCount}</strong> responses collected
               </p>
               <button
+                type="button"
                 onClick={async () => {
                   const res = await fetch(`/api/audits/${auditId}/compute-score`, { method: "POST" });
                   if (res.ok) { setScoreSuccess(true); onScored?.(); }
@@ -1194,7 +1349,7 @@ function ResultsTab({ auditId }: { auditId: string }) {
         <p className="text-xs text-muted-foreground mb-5">
           Compute scores once survey responses have been collected. Results are stored and updated each time you recompute.
         </p>
-        <button onClick={compute} disabled={computing} className="btn-primary flex items-center gap-2 mx-auto">
+        <button type="button" onClick={compute} disabled={computing} className="btn-primary flex items-center gap-2 mx-auto">
           <TrendingUp size={14} />
           {computing ? "Computing…" : "Compute Scores Now"}
         </button>
@@ -1211,7 +1366,7 @@ function ResultsTab({ auditId }: { auditId: string }) {
     return (
       <div className="p-8 text-center text-muted-foreground text-sm">
         <p>No results found.</p>
-        <button onClick={compute} className="btn-ghost text-xs mt-2 flex items-center gap-1 mx-auto">
+        <button type="button" onClick={compute} className="btn-ghost text-xs mt-2 flex items-center gap-1 mx-auto">
           <TrendingUp size={12} /> Compute now
         </button>
       </div>
@@ -1508,11 +1663,13 @@ function EvidenceTrackerTab({ auditId }: { auditId: string }) {
             </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2">
-            <div className="h-2 rounded-full transition-all duration-500"
-              style={{
-                width: `${coveragePct}%`,
-                backgroundColor: coveragePct === 100 ? "#22c55e" : coveragePct >= 60 ? "#f59e0b" : "#ef4444"
-              }} />
+            <div
+              className={cn(
+                "h-2 rounded-full transition-all duration-500",
+                coveragePct === 100 ? "bg-green-500" : coveragePct >= 60 ? "bg-amber-500" : "bg-red-500"
+              )}
+              style={{ width: `${coveragePct}%` }}
+            />
           </div>
           <div className="flex gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><CheckCircle2 size={11} className="text-green-500" /> {summary.covered} covered</span>
@@ -1568,6 +1725,7 @@ function EvidenceTrackerTab({ auditId }: { auditId: string }) {
             return (
               <div key={section.id} className="section-card">
                 <button
+                  type="button"
                   onClick={() => toggleSection(section.id)}
                   className="section-card-header w-full flex items-center justify-between text-left hover:bg-muted/30 transition-colors">
                   <div className="flex items-center gap-2">
@@ -1599,6 +1757,7 @@ function EvidenceTrackerTab({ auditId }: { auditId: string }) {
                               <div className="flex items-start justify-between gap-2">
                                 <p className="text-sm text-foreground leading-snug">{item.question}</p>
                                 <button
+                                  type="button"
                                   onClick={() => toggleItem(item.id)}
                                   className="text-xs text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 mt-0.5">
                                   {isExpanded ? "less" : "more"}
