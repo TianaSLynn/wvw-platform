@@ -7,6 +7,7 @@ import {
   Plus, X, Users, Building2, GraduationCap, Mic2,
   BookOpen, Shield, Cpu, Smile, FileCheck, SkipForward,
   Loader2, RefreshCw, Lock, FileText, PackageCheck, Bot,
+  Umbrella, CalendarOff, ChevronDown, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,18 @@ type Employee = {
 };
 
 type Client = { id: string; name: string; industry?: string | null };
+
+type PtoRecord = {
+  id: string; userId: string; userName: string;
+  title?: string | null; department?: string | null;
+  startDate: string; endDate: string; days: number;
+  type: string; note?: string | null;
+};
+
+type PtoData = {
+  records: PtoRecord[];
+  noUpcomingPto: Array<{ id: string; firstName: string; lastName: string; title?: string | null; department?: string | null }>;
+};
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -125,18 +138,22 @@ export default function OnboardingWorkflowPage() {
   const [createError, setCreateError] = useState("");
   const [updatingStep, setUpdatingStep] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
+  const [ptoData, setPtoData] = useState<PtoData | null>(null);
+  const [ptoOpen, setPtoOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [wRes, eRes, cRes] = await Promise.all([
+      const [wRes, eRes, cRes, pRes] = await Promise.all([
         fetch(`/api/onboarding${typeFilter !== "all" ? `?type=${typeFilter}` : ""}`),
         fetch("/api/workforce"),
         fetch("/api/clients"),
+        fetch("/api/workforce/pto"),
       ]);
       if (wRes.ok) setWorkflows((await wRes.json()).data);
       if (eRes.ok) setEmployees((await eRes.json()).data);
       if (cRes.ok) setClients((await cRes.json()).data);
+      if (pRes.ok) setPtoData((await pRes.json()).data);
     } finally { setLoading(false); }
   }, [typeFilter]);
 
@@ -268,6 +285,109 @@ export default function OnboardingWorkflowPage() {
           </div>
         </div>
       </div>
+
+      {/* Stat cards — derived from loaded workflows */}
+      {!loading && (() => {
+        const activeOnboarding  = workflows.filter((w) => w.type === "ONBOARDING"  && w.status !== "COMPLETED").length;
+        const activeOffboarding = workflows.filter((w) => w.type === "OFFBOARDING" && w.status !== "COMPLETED").length;
+        const blockedSteps = workflows.reduce((n, w) => n + w.steps.filter((s) => s.status === "BLOCKED").length, 0);
+        const docsPending  = workflows.reduce((n, w) => n + w.steps.filter((s) => s.documentRequired && !s.documentCollected && s.status !== "COMPLETED").length, 0);
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Active Onboarding",  value: activeOnboarding,  color: "text-emerald-600", bg: "bg-emerald-500/10 border-emerald-500/20", icon: UserPlus },
+              { label: "Active Offboarding", value: activeOffboarding, color: "text-red-600",     bg: "bg-red-500/10 border-red-500/20",         icon: ArrowLeft },
+              { label: "Blocked Steps",      value: blockedSteps,      color: "text-amber-600",   bg: "bg-amber-500/10 border-amber-500/20",     icon: Lock },
+              { label: "Docs Pending",       value: docsPending,       color: "text-violet-600",  bg: "bg-violet-500/10 border-violet-500/20",   icon: FileText },
+            ].map(({ label, value, color, bg, icon: Icon }) => (
+              <div key={label} className="section-card p-4 flex items-center gap-3">
+                <div className={cn("w-9 h-9 rounded-lg border flex items-center justify-center flex-shrink-0", bg)}>
+                  <Icon size={16} className={color} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold leading-none">{value}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* PTO & Time Off panel */}
+      {!loading && ptoData && (
+        <div className="section-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPtoOpen((v) => !v)}
+            className="w-full section-card-header flex items-center justify-between hover:bg-muted/30 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Umbrella size={14} className="text-sky-600" />
+              <h2 className="text-sm font-semibold">PTO & Time Off (Next 90 Days)</h2>
+              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                {ptoData.records.filter((r) => r.type === "pto").length} scheduled
+              </span>
+              {ptoData.noUpcomingPto.length > 0 && (
+                <span className="text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
+                  {ptoData.noUpcomingPto.length} no PTO scheduled
+                </span>
+              )}
+            </div>
+            {ptoOpen ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
+          </button>
+
+          {ptoOpen && (
+            <div className="p-4 space-y-4">
+              {/* Scheduled PTO */}
+              {ptoData.records.length > 0 ? (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Scheduled Time Off</p>
+                  <div className="divide-y divide-border/60 rounded-lg border border-border overflow-hidden">
+                    {ptoData.records.map((r) => (
+                      <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/20 transition-colors">
+                        <div className={cn("w-2 h-2 rounded-full flex-shrink-0", r.type === "pto" ? "bg-sky-500" : "bg-violet-500")} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{r.userName}</p>
+                          {r.title && <p className="text-[11px] text-muted-foreground">{r.title}</p>}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs font-medium">
+                            {new Date(r.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {r.days > 1 && ` – ${new Date(r.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{r.days} day{r.days !== 1 ? "s" : ""} · {r.type.toUpperCase()}</p>
+                        </div>
+                        {r.note && <p className="text-[10px] text-muted-foreground italic max-w-32 truncate">{r.note}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No PTO scheduled in the next 90 days.</p>
+              )}
+
+              {/* Use-or-lose risk: users with no upcoming PTO */}
+              {ptoData.noUpcomingPto.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CalendarOff size={12} className="text-amber-600" />
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">No PTO Scheduled — Use-or-Lose Risk</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {ptoData.noUpcomingPto.map((u) => (
+                      <div key={u.id} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                        <span className="text-xs font-medium">{u.firstName} {u.lastName}</span>
+                        {u.title && <span className="text-[10px] text-muted-foreground">· {u.title}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="section-card p-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
