@@ -27,6 +27,12 @@ export async function POST(
               id: true,
               guidance: true,
               riskWeight: true,
+              qId: true,
+              questionType: true,
+              reverseScored: true,
+              riskTag: true,
+              pathwayTriggers: true,
+              scenarioOptions: true,
             },
           },
         },
@@ -36,7 +42,7 @@ export async function POST(
 
   if (!audit) return badRequest("Audit not found");
 
-  // Flatten ALL items — scoring handles both Likert (1-5) and yes/no responses
+  // Flatten ALL items with full WVW metadata for v2 scoring
   const items: ChecklistItemMeta[] = [];
   for (const section of audit.sections) {
     for (const item of section.checklistItems) {
@@ -46,6 +52,14 @@ export async function POST(
         riskWeight: item.riskWeight ?? 1,
         sectionId: section.id,
         sectionTitle: section.title,
+        qId: item.qId ?? undefined,
+        questionType: (item.questionType as ChecklistItemMeta["questionType"]) ?? "Likert",
+        reverseScored: item.reverseScored ?? false,
+        riskTag: item.riskTag ?? undefined,
+        pathwayTriggers: item.pathwayTriggers ?? [],
+        scenarioOptions: item.scenarioOptions
+          ? (item.scenarioOptions as ChecklistItemMeta["scenarioOptions"])
+          : undefined,
       });
     }
   }

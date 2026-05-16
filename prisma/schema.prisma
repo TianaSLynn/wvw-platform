@@ -875,6 +875,15 @@ model AuditTemplateItem {
   questionBankItemId   String?
   questionBankItem     QuestionBankItem? @relation(fields: [questionBankItemId], references: [id])
 
+  // WVW Intelligence Engine metadata
+  qId              String?                  // e.g. "CORE_LT_01"
+  questionType     String  @default("Likert") // Likert|Frequency|Severity|Scenario|Evidence|OpenEnded|Ranking|Matrix|Confidence|HiddenTrigger|Contradiction|MultipleChoice
+  reverseScored    Boolean @default(false)
+  riskTag          String?                  // e.g. "burnout", "leadership", "psych-safety"
+  pathwayTriggers  String[]
+  industryTags     String[]                 // ["government","tech","healthcare","general"]
+  scenarioOptions  Json?                    // [{letter,text,score}]
+
   @@index([sectionId])
   @@index([questionBankItemId])
 }
@@ -905,7 +914,7 @@ model AuditChecklistItem {
 
   question    String
   guidance    String?
-  response    String?  // "yes", "no", "partial", "n/a"
+  response    String?  // "yes", "no", "partial", "n/a", or "1"-"5" for Likert
   notes       String?
   riskWeight  Float    @default(1.0)
   isRequired  Boolean  @default(true)
@@ -913,6 +922,14 @@ model AuditChecklistItem {
   isCompleted Boolean  @default(false)
   completedAt DateTime?
   sortOrder   Int      @default(0)
+
+  // WVW Intelligence Engine metadata
+  qId             String?
+  questionType    String  @default("Likert")
+  reverseScored   Boolean @default(false)
+  riskTag         String?
+  pathwayTriggers String[]
+  scenarioOptions Json?
 
   evidence    Evidence[]
 
