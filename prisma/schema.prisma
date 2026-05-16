@@ -245,6 +245,7 @@ model Organization {
   externalSignals ExternalSignal[]
   recognitions  Recognition[]
   auditBundles  AuditBundle[]
+  ptoTypes      PtoType[]
 
   @@index([slug])
 }
@@ -318,6 +319,9 @@ model User {
   createdCourses      Course[]         @relation("CreatedCourses")
   assignedCourses     CourseAssignment[] @relation("AssignedCourses")
   recognitionsGiven   Recognition[]    @relation("RecognitionsGiven")
+  ptoBalances         PtoBalance[]
+  ptoRequests         PtoRequest[]
+  ptoReviews          PtoRequest[]     @relation("PtoReviewer")
 
   @@unique([orgId, email])
   @@index([orgId, role])
@@ -2510,4 +2514,83 @@ model Invite {
 
   @@index([orgId])
   @@index([token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PTO MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PtoType {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name        String                      // "Vacation", "Sick Leave", "Mental Health Day"
+  code        String                      // "VAC", "SICK", "MHD"
+  color       String       @default("#6B8F71")
+  description String?
+  icon        String?                     // emoji or icon name hint
+
+  defaultDays  Float        @default(0)   // annual allocation
+  maxCarryover Float?                     // null = unlimited carryover
+  requiresApproval Boolean  @default(true)
+  isPaid       Boolean      @default(true)
+  isActive     Boolean      @default(true)
+  sortOrder    Int          @default(0)
+
+  balances    PtoBalance[]
+  requests    PtoRequest[]
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([orgId, code])
+  @@index([orgId])
+}
+
+model PtoBalance {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ptoTypeId  String
+  ptoType    PtoType  @relation(fields: [ptoTypeId], references: [id], onDelete: Cascade)
+
+  year       Int                          // fiscal year e.g. 2026
+  allocated  Float    @default(0)         // total days granted this year (adjustable by SUPER_ADMIN)
+  used       Float    @default(0)         // days consumed by approved requests
+  pending    Float    @default(0)         // days in PENDING requests
+  carryover  Float    @default(0)         // days carried over from prior year
+
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, ptoTypeId, year])
+  @@index([userId])
+}
+
+model PtoRequest {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ptoTypeId  String
+  ptoType    PtoType  @relation(fields: [ptoTypeId], references: [id])
+
+  startDate  DateTime @db.Date
+  endDate    DateTime @db.Date
+  days       Float                        // business days requested
+  note       String?
+
+  status     String   @default("PENDING") // PENDING | APPROVED | DENIED | CANCELLED
+
+  reviewedById String?
+  reviewedBy   User?    @relation("PtoReviewer", fields: [reviewedById], references: [id])
+  reviewNote   String?
+  reviewedAt   DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([orgId, status])
+  @@index([userId])
+  @@index([orgId, startDate])
 }

@@ -9,7 +9,7 @@ import {
   DollarSign, Settings, Briefcase, FolderOpen, FileText,
   GraduationCap, Award, TrendingUp, Receipt, BarChart2,
   Building2, MessageCircle, Calendar, Brain, Star,
-  Scale, X, Bell, Shield, Target, Library, Layers, Mail,
+  Scale, X, Bell, Shield, Target, Library, Layers, Mail, Umbrella,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -65,6 +65,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/people/hris",    icon: Users,     label: "HRIS Activity Hub" },
       { to: "/workforce",      icon: Building2, label: "Workforce / HRIS" },
       { to: "/workforce/onboarding", icon: ClipboardList, label: "Onboarding" },
+      { to: "/workforce/pto",  icon: Umbrella,  label: "PTO & Time Off" },
       { to: "/people",         icon: Users,     label: "People & Culture" },
       { to: "/jobs",           icon: Briefcase, label: "Jobs & Hiring" },
       { to: "/people/time",    icon: BarChart2, label: "Time Tracking" },

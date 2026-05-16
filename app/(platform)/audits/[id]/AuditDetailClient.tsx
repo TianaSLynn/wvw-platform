@@ -100,7 +100,7 @@ export default function AuditDetailClient({
           scope: audit.scope ?? undefined,
           industry: audit.client?.name ? undefined : undefined,
           frameworks: audit.frameworks?.map((f: { framework: { name: string } }) => f.framework.name) ?? [],
-          objectives: audit.objectives ?? [],
+          objectives: [],
         }),
       });
       if (!genRes.ok) throw new Error("Generation failed");
