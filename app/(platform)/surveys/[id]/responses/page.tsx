@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, List, Clock } from "lucide-react";
+import { ArrowLeft, List, Clock, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Survey Responses" };
@@ -58,7 +58,17 @@ export default async function SurveyResponsesPage({
             <h1 className="text-xl font-bold">Responses — {survey.title}</h1>
           </div>
         </div>
-        <span className="text-sm text-muted-foreground">{total} total</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">{total} total</span>
+          {total > 0 && (
+            <a
+              href={`/api/surveys/${id}/export`}
+              className="btn-ghost text-xs flex items-center gap-1.5"
+            >
+              <Download size={12} /> Export CSV
+            </a>
+          )}
+        </div>
       </div>
 
       {submissions.length === 0 ? (
@@ -77,6 +87,9 @@ export default async function SurveyResponsesPage({
                     <span className="text-xs font-mono text-muted-foreground">#{num}</span>
                     {!survey.isAnonymous && sub.respondentName && (
                       <span className="text-sm font-semibold">{sub.respondentName}</span>
+                    )}
+                    {!survey.isAnonymous && sub.respondentEmail && (
+                      <span className="text-xs text-muted-foreground">{sub.respondentEmail}</span>
                     )}
                     {survey.isAnonymous && (
                       <span className="text-sm text-muted-foreground">Anonymous</span>

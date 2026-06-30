@@ -220,8 +220,12 @@ export default function PublicSurveyPage() {
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [step, setStep] = useState(0); // 0 = intro
+  const [step, setStep] = useState(0); // 0 = intro, 0.5 = your info (non-anonymous only)
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
+  const [respondentName, setRespondentName] = useState("");
+  const [respondentEmail, setRespondentEmail] = useState("");
+  const [needsInfo, setNeedsInfo] = useState(false);
+  const [infoActive, setInfoActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -233,7 +237,12 @@ export default function PublicSurveyPage() {
         if (r.status === 404) { setNotFound(true); setLoading(false); return null; }
         return r.json();
       })
-      .then((data) => { if (data) setSurvey(data.data); })
+      .then((data) => {
+        if (data) {
+          setSurvey(data.data);
+          setNeedsInfo(!data.data.isAnonymous);
+        }
+      })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -247,6 +256,9 @@ export default function PublicSurveyPage() {
   const progress = totalSteps > 0 ? Math.round((step / (totalSteps + 1)) * 100) : 0;
 
   function canAdvance() {
+    if (infoActive) {
+      return respondentName.trim().length > 0 && /\S+@\S+\.\S+/.test(respondentEmail);
+    }
     if (step === 0) return true;
     if (!currentQ) return true;
     if (!currentQ.required) return true;
@@ -254,6 +266,19 @@ export default function PublicSurveyPage() {
     if (ans === null || ans === undefined || ans === "") return false;
     if (Array.isArray(ans) && ans.length === 0) return false;
     return true;
+  }
+
+  function handleStart() {
+    if (needsInfo) {
+      setInfoActive(true);
+    } else {
+      setStep(1);
+    }
+  }
+
+  function handleInfoContinue() {
+    setInfoActive(false);
+    setStep(1);
   }
 
   async function submit() {
@@ -264,6 +289,7 @@ export default function PublicSurveyPage() {
     const payload = {
       fingerprint: fingerprint(),
       startedAt,
+      ...(needsInfo ? { respondentName: respondentName.trim(), respondentEmail: respondentEmail.trim() } : {}),
       answers: survey.questions.map((q) => {
         const val = answers[q.id];
         const isNumeric = ["likert", "nps", "rating"].includes(q.type);
@@ -343,7 +369,7 @@ export default function PublicSurveyPage() {
         </div>
 
         {/* Progress */}
-        {survey.showProgress && step > 0 && (
+        {survey.showProgress && step > 0 && !infoActive && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-gray-400">
               <span>Question {step} of {totalSteps}</span>
@@ -360,7 +386,7 @@ export default function PublicSurveyPage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 space-y-6">
-          {step === 0 ? (
+          {step === 0 && !infoActive ? (
             // Intro screen
             <div className="space-y-4">
               <h1 className="text-2xl font-bold text-[#0F1C3F]">{survey.title}</h1>
@@ -373,6 +399,36 @@ export default function PublicSurveyPage() {
                 </p>
               )}
               <p className="text-xs text-gray-400">{totalSteps} question{totalSteps !== 1 ? "s" : ""}</p>
+            </div>
+          ) : infoActive ? (
+            // Respondent info screen (name + email)
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-[#C9A84C] uppercase tracking-wider">Your Info</p>
+                <h2 className="text-lg font-semibold text-[#0F1C3F]">Let's start with your details</h2>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Full Name <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={respondentName}
+                    onChange={(e) => setRespondentName(e.target.value)}
+                    placeholder="Jordan Rivera"
+                    className="w-full border-2 rounded-xl px-4 py-3 text-sm bg-background text-foreground outline-none focus:border-[#C9A84C] placeholder:text-muted-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Email Address <span className="text-red-400">*</span></label>
+                  <input
+                    type="email"
+                    value={respondentEmail}
+                    onChange={(e) => setRespondentEmail(e.target.value)}
+                    placeholder="jordan@organization.org"
+                    className="w-full border-2 rounded-xl px-4 py-3 text-sm bg-background text-foreground outline-none focus:border-[#C9A84C] placeholder:text-muted-foreground"
+                  />
+                </div>
+              </div>
             </div>
           ) : currentQ ? (
             // Question screen
@@ -427,16 +483,16 @@ export default function PublicSurveyPage() {
           {/* Navigation */}
           <div className="flex items-center justify-between pt-2">
             <button
-              onClick={() => setStep((s) => Math.max(0, s - 1))}
-              disabled={step === 0}
+              onClick={() => { if (infoActive) { setInfoActive(false); } else { setStep((s) => Math.max(0, s - 1)); } }}
+              disabled={step === 0 && !infoActive}
               className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 disabled:opacity-0 transition-all"
             >
               <ChevronLeft size={16} /> Back
             </button>
 
-            {step < totalSteps ? (
+            {infoActive ? (
               <button
-                onClick={() => setStep((s) => s + 1)}
+                onClick={handleInfoContinue}
                 disabled={!canAdvance()}
                 className={cn(
                   "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
@@ -445,7 +501,20 @@ export default function PublicSurveyPage() {
                     : "bg-gray-100 text-gray-300 cursor-not-allowed"
                 )}
               >
-                {step === 0 ? "Start Survey" : "Next"} <ChevronRight size={16} />
+                Continue <ChevronRight size={16} />
+              </button>
+            ) : step < totalSteps ? (
+              <button
+                onClick={() => { if (step === 0) { handleStart(); } else { setStep((s) => s + 1); } }}
+                disabled={!canAdvance()}
+                className={cn(
+                  "flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all",
+                  canAdvance()
+                    ? "bg-[#0F1C3F] text-white hover:bg-[#1a2d5a]"
+                    : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                )}
+              >
+                {step === 0 ? "Start" : "Next"} <ChevronRight size={16} />
               </button>
             ) : (
               <button
