@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { Search, Plus, Tag, ToggleLeft, ToggleRight, ChevronDown, X, Library } from "lucide-react";
+import { Search, Plus, Tag, ToggleLeft, ToggleRight, ChevronDown, X, Library, Brain } from "lucide-react";
 
 interface Category {
   id: string; name: string; color: string; sortOrder: number;
@@ -14,10 +14,18 @@ interface Item {
   categoryId: string | null;
   category: (Omit<Category, "_count"> & { _count?: { items: number } }) | null;
 }
+interface WvwTemplateItem {
+  id: string; question: string; guidance: string | null; riskWeight: number;
+  qId: string | null; questionType: string; reverseScored: boolean;
+  riskTag: string | null; pathwayTriggers: string[];
+}
+interface WvwSection { id: string; title: string; items: WvwTemplateItem[] }
+interface WvwTemplate { id: string; name: string; description: string | null; type: string; sections: WvwSection[] }
 
 interface Props {
   initialCategories: Category[];
   initialItems:      Item[];
+  wvwTemplates:      WvwTemplate[];
   userRole:          string;
   orgId:             string;
 }
@@ -56,9 +64,10 @@ function colorDotClass(color: string): string {
   return map[color] ?? "bg-muted-foreground";
 }
 
-export default function QuestionBankClient({ initialCategories, initialItems, userRole }: Props) {
+export default function QuestionBankClient({ initialCategories, initialItems, wvwTemplates, userRole }: Props) {
   const canManage = ["SUPER_ADMIN", "ADMIN", "PARTNER"].includes(userRole);
 
+  const [activeView, setActiveView] = useState<"bank" | "wvw">("bank");
   const [items,      setItems]      = useState<Item[]>(initialItems);
   const [categories]               = useState<Category[]>(initialCategories);
   const [search,     setSearch]     = useState("");
@@ -129,7 +138,41 @@ export default function QuestionBankClient({ initialCategories, initialItems, us
     .map((cat) => ({ cat, items: filtered.filter((i) => i.categoryId === cat.id) }))
     .filter((g) => g.items.length > 0);
 
+  const totalWvwQuestions = wvwTemplates.reduce((s, t) => s + t.sections.reduce((ss, sec) => ss + sec.items.length, 0), 0);
+
   return (
+    <div className="space-y-5">
+      {/* Tab switcher */}
+      <div className="flex items-center gap-2 border-b border-border pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveView("bank")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            activeView === "bank" ? "bg-navy-900 text-white" : "text-muted-foreground hover:bg-muted"
+          )}
+        >
+          <Library size={14} />
+          Question Bank
+          <span className="text-[10px] opacity-70">({items.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveView("wvw")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+            activeView === "wvw" ? "bg-gold text-navy-900" : "text-muted-foreground hover:bg-muted"
+          )}
+        >
+          <Brain size={14} />
+          WVW Intelligence™ Templates
+          <span className="text-[10px] opacity-70">({totalWvwQuestions} questions)</span>
+        </button>
+      </div>
+
+      {activeView === "wvw" ? (
+        <WvwTemplatesView templates={wvwTemplates} />
+      ) : (
     <div className="flex gap-6">
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 space-y-3">
@@ -353,6 +396,8 @@ export default function QuestionBankClient({ initialCategories, initialItems, us
         )}
       </div>
     </div>
+      )}
+    </div>
   );
 }
 
@@ -372,7 +417,7 @@ function QuestionCard({
         <button
           type="button"
           onClick={onToggleExpand}
-          aria-expanded={expanded ? "true" : "false"}
+          aria-expanded={expanded}
           aria-label={expanded ? "Collapse question" : "Expand question"}
           className="flex-1 text-left"
         >
@@ -423,6 +468,157 @@ function QuestionCard({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const QTYPE_COLORS: Record<string, string> = {
+  Likert:          "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  Frequency:       "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  Severity:        "bg-red-500/10 text-red-600 border-red-500/20",
+  Scenario:        "bg-amber-500/10 text-amber-700 border-amber-500/20",
+  Evidence:        "bg-green-500/10 text-green-700 border-green-500/20",
+  OpenEnded:       "bg-slate-500/10 text-slate-600 border-slate-500/20",
+  HiddenTrigger:   "bg-rose-500/10 text-rose-600 border-rose-500/20",
+  Contradiction:   "bg-orange-500/10 text-orange-700 border-orange-500/20",
+};
+
+function WvwTemplatesView({ templates }: { templates: WvwTemplate[] }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  if (templates.length === 0) {
+    return (
+      <div className="empty-state">
+        <div className="empty-state-icon"><Brain size={28} className="text-muted-foreground/40" /></div>
+        <p className="text-sm font-medium">No WVW templates found</p>
+        <p className="text-xs text-muted-foreground mt-1">Run the template seed from the Admin panel to load WVW Intelligence™ templates.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            aria-label="Search WVW questions"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search questions across all templates…"
+            className="w-full pl-9 pr-4 h-9 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-gold"
+          />
+        </div>
+        {search && (
+          <button type="button" onClick={() => setSearch("")} className="text-xs text-muted-foreground flex items-center gap-1 hover:text-foreground">
+            <X size={12} /> Clear
+          </button>
+        )}
+      </div>
+
+      {templates.map((tpl) => {
+        const filteredSections = search
+          ? tpl.sections.map((s) => ({
+              ...s,
+              items: s.items.filter((i) =>
+                i.question.toLowerCase().includes(search.toLowerCase()) ||
+                (i.qId ?? "").toLowerCase().includes(search.toLowerCase()) ||
+                (i.riskTag ?? "").toLowerCase().includes(search.toLowerCase())
+              ),
+            })).filter((s) => s.items.length > 0)
+          : tpl.sections;
+
+        const totalQ = filteredSections.reduce((s, sec) => s + sec.items.length, 0);
+        if (search && totalQ === 0) return null;
+
+        const isOpen = expanded === tpl.id;
+
+        return (
+          <div key={tpl.id} className="section-card">
+            <button
+              type="button"
+              aria-label={isOpen ? "Collapse template" : "Expand template"}
+              onClick={() => setExpanded(isOpen ? null : tpl.id)}
+              className="section-card-header w-full flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-3">
+                <Brain size={15} className="text-gold flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{tpl.name}</p>
+                  {tpl.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{tpl.description}</p>}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <span className="text-xs text-muted-foreground">{totalQ} questions · {filteredSections.length} sections</span>
+                <ChevronDown size={14} className={cn("text-muted-foreground transition-transform", isOpen && "rotate-180")} />
+              </div>
+            </button>
+
+            {isOpen && (
+              <div className="divide-y divide-border">
+                {filteredSections.map((sec) => (
+                  <div key={sec.id} className="px-5 py-3">
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                      {sec.title} <span className="font-normal">({sec.items.length})</span>
+                    </p>
+                    <div className="space-y-1.5">
+                      {sec.items.map((item) => {
+                        const itemOpen = expandedItem === item.id;
+                        return (
+                          <div key={item.id} className="rounded-lg border border-border bg-card/50">
+                            <button
+                              type="button"
+                              aria-label={itemOpen ? "Collapse question" : "Expand question"}
+                              onClick={() => setExpandedItem(itemOpen ? null : item.id)}
+                              className="w-full flex items-start gap-3 px-3 py-2.5 text-left"
+                            >
+                              <ChevronDown size={13} className={cn("text-muted-foreground mt-0.5 flex-shrink-0 transition-transform", itemOpen && "rotate-180")} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium leading-snug">{item.question}</p>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {item.qId && (
+                                  <span className="text-[9px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{item.qId}</span>
+                                )}
+                                <span className={cn("text-[9px] font-medium px-1.5 py-0.5 rounded border", QTYPE_COLORS[item.questionType] ?? "border-border text-muted-foreground bg-muted/50")}>
+                                  {item.questionType}
+                                </span>
+                                {item.riskTag && (
+                                  <span className="text-[9px] text-amber-700 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">{item.riskTag}</span>
+                                )}
+                                {item.reverseScored && (
+                                  <span className="text-[9px] text-rose-600 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">↺ Rev</span>
+                                )}
+                              </div>
+                            </button>
+                            {itemOpen && item.guidance && (
+                              <div className="px-3 pb-3 ml-8">
+                                <div className="p-2.5 bg-muted/50 rounded-lg border border-border">
+                                  <p className="text-[10px] text-muted-foreground font-medium mb-1">Auditor Guidance</p>
+                                  <p className="text-xs leading-relaxed text-foreground/80">{item.guidance}</p>
+                                </div>
+                                {item.pathwayTriggers.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {item.pathwayTriggers.map((pt) => (
+                                      <span key={pt} className="text-[9px] px-1.5 py-0.5 rounded-full bg-navy-900/10 text-navy-900 border border-navy-900/20">{pt}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -6,9 +6,11 @@ import { StatCard } from "@/components/ui/StatCard";
 import {
   DollarSign, ClipboardList, Users, AlertTriangle,
   Zap, Clock, CheckCircle2, TrendingUp, ArrowRight, Shield,
+  Sun, Brain, Umbrella, FileText, Calendar,
 } from "lucide-react";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { DashboardCharts } from "./DashboardCharts";
+import AiBriefCard from "./AiBriefCard";
 import Link from "next/link";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -24,6 +26,7 @@ async function getWvwDashboardData(orgId: string) {
   const [
     totalClients, activeProjects, activeAudits, openFindings,
     thisMonthRevenue, lastMonthRevenue, overdueInvoices,
+    pendingPto, todayMeetings,
     recentAudits, recentActivity, upcomingMilestones,
   ] = await Promise.all([
     db.client.count({ where: { orgId, isActive: true, deletedAt: null } }),
@@ -41,6 +44,12 @@ async function getWvwDashboardData(orgId: string) {
       _sum: { total: true },
     }),
     db.invoice.count({ where: { orgId, status: "OVERDUE" } }),
+    db.ptoRequest.count({ where: { orgId, status: "PENDING" } }),
+    db.meeting.findMany({
+      where: { orgId, scheduledAt: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()), lte: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59) } },
+      select: { id: true, title: true, scheduledAt: true, type: true },
+      orderBy: { scheduledAt: "asc" }, take: 5,
+    }),
     db.audit.findMany({
       where: { orgId },
       orderBy: { updatedAt: "desc" },
@@ -62,7 +71,7 @@ async function getWvwDashboardData(orgId: string) {
   const lastRevenue = lastMonthRevenue._sum.total ?? 0;
   const revenueTrend = lastRevenue > 0 ? ((thisRevenue - lastRevenue) / lastRevenue) * 100 : 0;
 
-  return { totalClients, activeProjects, activeAudits, openFindings, thisRevenue, revenueTrend, overdueInvoices, recentAudits, recentActivity, upcomingMilestones };
+  return { totalClients, activeProjects, activeAudits, openFindings, thisRevenue, revenueTrend, overdueInvoices, pendingPto, todayMeetings, recentAudits, recentActivity, upcomingMilestones };
 }
 
 async function getConsultantDashboardData(orgId: string, userId: string) {
@@ -182,6 +191,62 @@ function ActivityFeed({ items }: { items: Array<{ id: string; user: { firstName:
   );
 }
 
+// ─── Today's Brief Card ─────────────────────────────────────────────────────────
+
+function TodaysBriefCard({ data }: { data: WvwData }) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  const alerts: Array<{ icon: React.ElementType; color: string; text: string; href: string; critical?: boolean }> = [];
+
+  if (data.overdueInvoices > 0)
+    alerts.push({ icon: DollarSign, color: "text-red-500", text: `${data.overdueInvoices} overdue invoice${data.overdueInvoices !== 1 ? "s" : ""} need collection`, href: "/invoices?status=OVERDUE", critical: true });
+  if (data.openFindings > 0)
+    alerts.push({ icon: AlertTriangle, color: "text-amber-500", text: `${data.openFindings} critical/high finding${data.openFindings !== 1 ? "s" : ""} open`, href: "/audits?tab=findings", critical: data.openFindings > 3 });
+  if (data.pendingPto > 0)
+    alerts.push({ icon: Umbrella, color: "text-blue-500", text: `${data.pendingPto} PTO request${data.pendingPto !== 1 ? "s" : ""} awaiting approval`, href: "/workforce/pto" });
+  if (data.activeAudits > 0)
+    alerts.push({ icon: ClipboardList, color: "text-purple-500", text: `${data.activeAudits} audit${data.activeAudits !== 1 ? "s" : ""} in progress`, href: "/audits" });
+  if (data.todayMeetings.length > 0)
+    alerts.push({ icon: Calendar, color: "text-green-500", text: `${data.todayMeetings.length} meeting${data.todayMeetings.length !== 1 ? "s" : ""} scheduled today`, href: "/calendar" });
+
+  if (alerts.length === 0)
+    alerts.push({ icon: CheckCircle2, color: "text-green-500", text: "All clear — no urgent items today", href: "/dashboard" });
+
+  return (
+    <div className="section-card animate-fade-in">
+      <div className="section-card-header flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sun size={14} className="text-gold" />
+          <h2 className="font-semibold text-sm">Today&apos;s Brief</h2>
+          <span className="text-xs text-muted-foreground font-normal">· {dateStr}</span>
+        </div>
+        <Link href="/ai-command" className="flex items-center gap-1.5 text-xs text-gold hover:underline">
+          <Brain size={12} /> Full AI Brief
+        </Link>
+      </div>
+      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {alerts.map((a, i) => {
+          const Icon = a.icon;
+          return (
+            <Link key={i} href={a.href}
+              className={cn(
+                "flex items-center gap-3 p-3 rounded-xl border transition-all hover:-translate-y-0.5",
+                a.critical
+                  ? "border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/20 hover:border-red-300"
+                  : "border-border hover:border-gold/30 hover:bg-muted/30"
+              )}
+            >
+              <Icon size={14} className={cn("flex-shrink-0", a.color)} />
+              <p className="text-xs font-medium leading-snug">{a.text}</p>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Role-specific dashboard views ────────────────────────────────────────────
 
 type WvwData = Awaited<ReturnType<typeof getWvwDashboardData>>;
@@ -191,6 +256,8 @@ type ClientData = Awaited<ReturnType<typeof getClientDashboardData>>;
 function WvwLeadershipDashboard({ data, orgId }: { data: WvwData; orgId: string }) {
   return (
     <>
+      <AiBriefCard />
+
       <section aria-label="Key metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
         <StatCard label="Monthly Revenue" value={formatCurrency(data.thisRevenue, "USD", true)} trend={data.revenueTrend} trendLabel="vs last month" icon={DollarSign} iconColor="text-gold" iconBg="bg-gold/10 border-gold/20" />
         <StatCard label="Active Audits" value={data.activeAudits} subvalue={`${data.openFindings} critical findings`} icon={ClipboardList} iconColor="text-blue-500" iconBg="bg-blue-500/10 border-blue-500/20" />

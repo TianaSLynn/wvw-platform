@@ -692,7 +692,11 @@ ${context ? `\nCurrent page context: ${context}` : ""}`;
           controller.close();
         } catch (e) {
           console.error("[AI Chat Error]", e);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: "\n\nSorry, I encountered an error fetching that data. Please try again." })}\n\n`));
+          const isAuthError = e instanceof Error && (e.message.includes("401") || e.message.includes("authentication") || e.message.includes("invalid x-api-key"));
+          const errMsg = isAuthError
+            ? "\n\n⚠️ AI service configuration error — the API key needs to be updated. Please contact your administrator."
+            : "\n\nSorry, I encountered an error processing your request. Please try again.";
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: errMsg })}\n\n`));
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         }

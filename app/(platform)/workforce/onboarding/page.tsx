@@ -60,6 +60,7 @@ type Employee = {
 };
 
 type Client = { id: string; name: string; industry?: string | null };
+type TeamMember = { id: string; firstName: string; lastName: string; title?: string | null; role: string };
 
 type PtoRecord = {
   id: string; userId: string; userName: string;
@@ -127,8 +128,9 @@ const DEFAULT_FORM: CreateForm = {
 
 export default function OnboardingWorkflowPage() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [clients, setClients]     = useState<Client[]>([]);
+  const [employees, setEmployees]   = useState<Employee[]>([]);
+  const [clients, setClients]       = useState<Client[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading]     = useState(true);
   const [activeId, setActiveId]   = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<"ONBOARDING" | "OFFBOARDING" | "all">("all");
@@ -144,16 +146,18 @@ export default function OnboardingWorkflowPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [wRes, eRes, cRes, pRes] = await Promise.all([
+      const [wRes, eRes, cRes, pRes, mRes] = await Promise.all([
         fetch(`/api/onboarding${typeFilter !== "all" ? `?type=${typeFilter}` : ""}`),
         fetch("/api/workforce"),
         fetch("/api/clients"),
         fetch("/api/workforce/pto"),
+        fetch("/api/org/members"),
       ]);
       if (wRes.ok) setWorkflows((await wRes.json()).data);
       if (eRes.ok) setEmployees((await eRes.json()).data);
       if (cRes.ok) setClients((await cRes.json()).data);
       if (pRes.ok) setPtoData((await pRes.json()).data);
+      if (mRes.ok) setTeamMembers((await mRes.json()).data);
     } finally { setLoading(false); }
   }, [typeFilter]);
 
@@ -226,6 +230,18 @@ export default function OnboardingWorkflowPage() {
       } else {
         await load();
       }
+    } finally { setUpdatingStep(null); }
+  }
+
+  async function assignStep(workflowId: string, stepId: string, assignedToId: string | null) {
+    setUpdatingStep(stepId);
+    try {
+      await fetch(`/api/onboarding/${workflowId}/steps`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepId, assignedToId }),
+      });
+      await load();
     } finally { setUpdatingStep(null); }
   }
 
@@ -313,6 +329,77 @@ export default function OnboardingWorkflowPage() {
           </div>
         );
       })()}
+
+      {/* ── Progress Overview — all active workflows ──────────────────────── */}
+      {!loading && workflows.filter((w) => w.status !== "COMPLETED").length > 0 && (
+        <div className="section-card overflow-hidden">
+          <div className="section-card-header flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bot size={14} className="text-gold" />
+              <h2 className="text-sm font-semibold">Everyone&apos;s Progress</h2>
+              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                {workflows.filter((w) => w.status !== "COMPLETED").length} active
+              </span>
+            </div>
+          </div>
+          <div className="divide-y divide-border/50">
+            {workflows
+              .filter((w) => w.status !== "COMPLETED")
+              .map((wf) => {
+                const pct = progress(wf);
+                const cfg = ENTITY_CONFIG[wf.entityType as EntityType];
+                const Icon = cfg?.icon ?? Users;
+                const name = workflowLabel(wf);
+                const sub = workflowSubLabel(wf);
+                const done = wf.steps.filter((s) => s.status === "COMPLETED" || s.status === "SKIPPED").length;
+                const total = wf.steps.length;
+                const overdue = wf.targetDate && new Date(wf.targetDate) < new Date() && wf.status !== "COMPLETED";
+                const blocked = wf.steps.filter((s) => s.status === "BLOCKED").length;
+                const docsNeeded = wf.steps.filter((s) => s.documentRequired && !s.documentCollected && s.status !== "COMPLETED").length;
+                return (
+                  <button
+                    key={wf.id}
+                    type="button"
+                    onClick={() => setActiveId(wf.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/30 transition-colors text-left",
+                      activeId === wf.id && "bg-muted/50",
+                    )}
+                  >
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", cfg?.bg ?? "bg-muted")}>
+                      <Icon size={14} className={cfg?.color ?? "text-muted-foreground"} aria-hidden />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-sm font-medium truncate">{name}</span>
+                        {sub && <span className="text-[11px] text-muted-foreground">{sub}</span>}
+                        {overdue && (
+                          <span className="text-[10px] font-semibold bg-red-500/10 text-red-600 px-1.5 py-0.5 rounded-full">OVERDUE</span>
+                        )}
+                        {blocked > 0 && (
+                          <span className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full">{blocked} blocked</span>
+                        )}
+                        {docsNeeded > 0 && (
+                          <span className="text-[10px] bg-violet-500/10 text-violet-600 px-1.5 py-0.5 rounded-full">{docsNeeded} docs needed</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          {/* eslint-disable-next-line react/forbid-dom-props */}
+                          <div className={cn("h-full rounded-full transition-all duration-500", pct === 100 ? "bg-emerald-500" : "bg-gold")} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[11px] text-muted-foreground flex-shrink-0 tabular-nums w-16 text-right">
+                          {done}/{total} steps
+                        </span>
+                        <span className="text-[11px] font-bold tabular-nums w-8 text-right">{pct}%</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* PTO & Time Off panel */}
       {!loading && ptoData && (
@@ -574,6 +661,29 @@ export default function OnboardingWorkflowPage() {
                               )}
                               {step.notes && (
                                 <p className="text-[11px] text-blue-600 mt-1 italic">{step.notes}</p>
+                              )}
+
+                              {/* Assignment */}
+                              {!isBlocked && (
+                                <div className="mt-1.5 flex items-center gap-1.5">
+                                  <select
+                                    aria-label="Assign step to team member"
+                                    value={step.assignedTo ? (teamMembers.find(m => m.firstName === step.assignedTo?.firstName && m.lastName === step.assignedTo?.lastName)?.id ?? "") : ""}
+                                    onChange={e => assignStep(active.id, step.id, e.target.value || null)}
+                                    disabled={updatingStep === step.id}
+                                    className="text-[11px] border border-border rounded-md px-1.5 py-0.5 bg-background text-muted-foreground focus:outline-none focus:ring-1 focus:ring-gold/40 max-w-[160px]"
+                                  >
+                                    <option value="">Unassigned</option>
+                                    {teamMembers.map(m => (
+                                      <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                                    ))}
+                                  </select>
+                                  {step.assignedTo && (
+                                    <span className="text-[10px] text-muted-foreground">
+                                      → {step.assignedTo.firstName} {step.assignedTo.lastName}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
 

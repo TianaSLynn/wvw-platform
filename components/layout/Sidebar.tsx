@@ -11,6 +11,7 @@ import {
   GraduationCap, Award, TrendingUp, Receipt, BarChart2,
   Building2, MessageCircle, Calendar, Brain, Star,
   Scale, X, Bell, Shield, Target, Library, Layers, Mail, Umbrella,
+  Activity, BarChart,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -63,13 +64,14 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: "People & HR",
     items: [
-      { to: "/people/hris",    icon: Users,     label: "HRIS Activity Hub" },
-      { to: "/workforce",      icon: Building2, label: "Workforce / HRIS" },
-      { to: "/workforce/onboarding", icon: ClipboardList, label: "Onboarding" },
-      { to: "/workforce/pto",  icon: Umbrella,  label: "PTO & Time Off" },
-      { to: "/people",         icon: Users,     label: "People & Culture" },
-      { to: "/jobs",           icon: Briefcase, label: "Jobs & Hiring" },
-      { to: "/people/time",    icon: BarChart2, label: "Time Tracking" },
+      { to: "/people/hris",         icon: Users,        label: "HRIS Activity Hub" },
+      { to: "/workforce",           icon: Building2,    label: "Workforce / HRIS" },
+      { to: "/workforce/onboarding",icon: ClipboardList, label: "Onboarding (Admin)" },
+      { to: "/my-onboarding",       icon: ClipboardList, label: "My Onboarding" },
+      { to: "/workforce/pto",       icon: Umbrella,     label: "PTO & Time Off" },
+      { to: "/people",              icon: Users,        label: "People & Culture" },
+      { to: "/jobs",                icon: Briefcase,    label: "Jobs & Hiring" },
+      { to: "/people/time",         icon: BarChart2,    label: "Time Tracking" },
     ],
   },
   {
@@ -79,6 +81,12 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/academy/courses",     icon: BookOpen,      label: "Courses" },
       { to: "/academy/students",    icon: Users,         label: "Students" },
       { to: "/academy/credentials", icon: Award,         label: "Credentials" },
+    ],
+  },
+  {
+    title: "Surveys",
+    items: [
+      { to: "/surveys",     icon: BarChart,      label: "Survey Builder" },
     ],
   },
   {
@@ -106,6 +114,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/settings/invites",      icon: Mail,      label: "Invitations" },
       { to: "/settings/organization", icon: Building2, label: "Org Settings" },
       { to: "/settings/integrations", icon: Settings,  label: "Integrations" },
+      { to: "/app-status",            icon: Activity,  label: "App Status", badge: "ADMIN" },
     ],
   },
 ];

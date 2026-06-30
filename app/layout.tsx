@@ -5,6 +5,7 @@ import { dark } from "@clerk/themes";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { Toaster } from "@/components/ui/toaster";
+import { CookieBanner } from "@/components/ui/CookieBanner";
 import "./globals.css";
 
 const inter = Inter({
@@ -76,6 +77,7 @@ export default function RootLayout({
             <QueryProvider>
               {children}
               <Toaster />
+              <CookieBanner />
             </QueryProvider>
           </ThemeProvider>
         </body>

@@ -245,6 +245,7 @@ model Organization {
   externalSignals ExternalSignal[]
   recognitions  Recognition[]
   auditBundles  AuditBundle[]
+  surveys       Survey[]
   ptoTypes      PtoType[]
 
   @@index([slug])
@@ -322,6 +323,7 @@ model User {
   ptoBalances         PtoBalance[]
   ptoRequests         PtoRequest[]
   ptoReviews          PtoRequest[]     @relation("PtoReviewer")
+  createdSurveys      Survey[]         @relation("CreatedSurveys")
 
   @@unique([orgId, email])
   @@index([orgId, role])
@@ -790,6 +792,7 @@ model Audit {
   evidence        Evidence[]
   activityLogs    ActivityLog[]
   surveyResponses SurveyResponse[]
+  surveys         Survey[]
   auditResult     AuditResult?
   recommendations GeneratedRecommendation[]
   reportSnapshots ReportSnapshot[]
@@ -2610,4 +2613,128 @@ model PtoRequest {
   @@index([orgId, status])
   @@index([userId])
   @@index([orgId, startDate])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SURVEY BUILDER — Qualtrics-style standalone + audit-linked surveys
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum SurveyStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+model Survey {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User         @relation("CreatedSurveys", fields: [createdById], references: [id])
+
+  title       String
+  description String?
+  slug        String       @unique  // public URL: /s/[slug]
+  status      SurveyStatus @default(DRAFT)
+
+  // Display settings
+  isAnonymous   Boolean   @default(true)
+  showProgress  Boolean   @default(true)
+  allowMultiple Boolean   @default(false)
+  confirmMessage String?  // shown on completion
+
+  // Optional close date
+  closeAt     DateTime?
+
+  // Optional link to an audit
+  auditId     String?
+  audit       Audit?       @relation(fields: [auditId], references: [id], onDelete: SetNull)
+
+  questions   SurveyQuestion[]
+  submissions SurveySubmission[]
+
+  publishedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+model SurveyQuestion {
+  id       String @id @default(cuid())
+  surveyId String
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  // Core
+  type      String  // likert | multiple_choice | checkbox | nps | rating | short_text | long_text | matrix | ranking | dropdown
+  title     String
+  description String?
+  required  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  // Choice-based questions (multiple_choice, checkbox, dropdown, ranking)
+  options   Json?   // [{id, label, value, score?}]
+
+  // Matrix questions
+  rows      Json?   // [{id, label}]
+  columns   Json?   // [{id, label, value}] — same as columns for matrix
+
+  // Scale questions (rating, nps, slider)
+  minValue  Int?
+  maxValue  Int?
+  minLabel  String?
+  maxLabel  String?
+
+  // Display / skip logic
+  logic     Json?   // {action:"show"|"skip", conditions:[{questionId,op:"eq"|"neq"|"gte"|"lte",value}]}
+
+  // Scoring weight (for audit-linked scoring)
+  weight    Float   @default(1.0)
+
+  answers   SurveyAnswer[]
+
+  @@index([surveyId])
+}
+
+model SurveySubmission {
+  id       String  @id @default(cuid())
+  surveyId String
+  survey   Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  // Respondent identity (optional — blank if anonymous)
+  respondentName  String?
+  respondentEmail String?
+  respondentRole  String?
+  respondentDept  String?
+
+  // Anti-duplicate fingerprint (IP hash)
+  fingerprint String?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  durationSec Int?
+
+  answers SurveyAnswer[]
+
+  @@index([surveyId])
+  @@index([surveyId, completedAt])
+}
+
+model SurveyAnswer {
+  id           String          @id @default(cuid())
+  submissionId String
+  submission   SurveySubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     SurveyQuestion  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  // Flexible value storage
+  valueText    String?          // short_text, long_text
+  valueNumber  Float?           // nps, rating, likert
+  valueJson    Json?            // checkbox[], matrix {rowId:value}, ranking [optionId]
+
+  @@unique([submissionId, questionId])
+  @@index([submissionId])
+  @@index([questionId])
 }

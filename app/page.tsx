@@ -121,11 +121,13 @@ export default async function HomePage() {
 
       {/* Footer */}
       <footer className="border-t border-[#1A1A1B]/10 py-8">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-[#708090]">
-          <span>© 2026 Wholistic Vibes Wellness. All rights reserved.</span>
-          <div className="flex gap-6">
+        <div className="max-w-6xl mx-auto px-6 flex flex-wrap items-center justify-between gap-4 text-xs text-[#708090]">
+          <span>© 2026 Wholistic Vibes Wellness, LLC. All rights reserved.</span>
+          <div className="flex flex-wrap gap-6">
             <Link href="/sign-in" className="hover:text-[#1A1A1B] transition-colors">Sign In</Link>
             <Link href="/sign-up" className="hover:text-[#1A1A1B] transition-colors">Get Started</Link>
+            <Link href="/privacy" className="hover:text-[#1A1A1B] transition-colors">Privacy Policy</Link>
+            <Link href="/terms"   className="hover:text-[#1A1A1B] transition-colors">Terms of Service</Link>
           </div>
         </div>
       </footer>
