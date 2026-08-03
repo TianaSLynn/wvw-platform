@@ -28,10 +28,10 @@ Source: live Netlify API (`netlify-project-services-reader get-forms-for-project
 | `FORM-MHFA-008` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-CERT-CORR-01 |
 | `FORM-MHFA-009` | 2026-07-21 | — | 0 | `official-form-name` (hidden), `screenshot` (file) | Technical support |
 | `FORM-MHFA-010` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-POST-01 pre-work support |
-| `FORM-MHFA-011` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-EVAL-01 |
+| `FORM-MHFA-011` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-EVAL-01 (built) |
 | `FORM-MHFA-012` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | Issue report |
-| `FORM-MHFA-013` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-COMP-01 (Restricted) |
-| `FORM-MHFA-014` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-ATT-01 |
+| `FORM-MHFA-013` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-COMP-01 (Restricted, built) |
+| `FORM-MHFA-014` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-ATT-01 (built) |
 | `FORM-MHFA-015` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | Session closeout summary |
 | `FORM-MHFA-016` | 2026-07-21 | — | 0 | `official-form-name` (hidden) | MHFA-POST-01 payment reconciliation |
 

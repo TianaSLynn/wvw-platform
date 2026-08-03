@@ -12,7 +12,7 @@
 | AUTO-06 MHFA Connect Enrollment Readiness | Zapier (live) | Active | Replace after payment confirmation path exists. |
 | AUTO-07 Pre-Work Reminder | Zapier (live) | Active | Later phase. |
 | AUTO-08 Session Reminder Cadence | Zapier (live) | Active | Later phase. |
-| AUTO-09 Attendance and Closeout | Zapier (live) | Active | Later phase. |
+| AUTO-09 Attendance and Closeout | Zapier (live) | Active | Attendance portion (MHFA-ATT-01) built + dev-tested on the hub, feature-flagged off. Closeout (session-level reconciliation) not yet built. Not yet cut over. |
 | AUTO-10 Certification Follow-Up | Zapier (live) | Active | Later phase. |
 | AUTO-11 Accommodation Alert | Zapier (live) | Active | Replacement (MHFA-ACC-01) built + dev-tested on the hub, feature-flagged off. Restricted-data path — entire form treated as Restricted; only a sanitized pointer is eligible for general logging. Not yet cut over. |
 | AUTO-12 Executive Dashboard Refresh | Zapier (live) | Active | Superseded by the hub's own dashboard metrics pipeline; replace last, only once source systems (above) are reliable — matches Tiána's own "Zapier Implementation Priority Order" note (dashboard refresh listed last for the same reason). |

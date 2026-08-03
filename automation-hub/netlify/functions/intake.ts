@@ -14,6 +14,15 @@ import {
   mhfaAccommodationRequestSchema,
   toGeneralAccommodationPointer,
 } from "../../packages/validation/src/mhfa-accommodation-request.schema.js";
+import { mhfaAttendanceSchema } from "../../packages/validation/src/mhfa-attendance.schema.js";
+import {
+  mhfaEvaluationSchema,
+  splitEvaluationFreeText,
+} from "../../packages/validation/src/mhfa-evaluation.schema.js";
+import {
+  mhfaComplaintSchema,
+  toGeneralComplaintPointer,
+} from "../../packages/validation/src/mhfa-complaint.schema.js";
 
 /**
  * POST /.netlify/functions/intake
@@ -26,8 +35,8 @@ import {
  * is persisted and nothing must be pointed at by a live form's Netlify
  * Forms notification/webhook.
  *
- * See docs/FORM_REGISTRY.md for the full form inventory; only the three
- * forms below are implemented so far (docs/IMPLEMENTATION_REGISTER.md).
+ * See docs/FORM_REGISTRY.md for the full form inventory; only the forms
+ * below are implemented so far (docs/IMPLEMENTATION_REGISTER.md).
  */
 
 interface FormHandlerResult {
@@ -94,6 +103,57 @@ const FORM_HANDLERS: Record<string, FormHandler> = {
         featureFlag: "MHFA_ACC_01_ENABLED",
         hasRestrictedData: true,
         generalPayload: toGeneralAccommodationPointer(parsed.data),
+      },
+    };
+  },
+
+  "FORM-MHFA-014": (body) => {
+    const parsed = mhfaAttendanceSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-ATT-01",
+        featureFlag: "MHFA_ATT_01_ENABLED",
+        hasRestrictedData: false,
+        generalPayload: parsed.data,
+      },
+    };
+  },
+
+  "FORM-MHFA-011": (body) => {
+    const parsed = mhfaEvaluationSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    const { scores, freeText } = splitEvaluationFreeText(parsed.data);
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-EVAL-01",
+        featureFlag: "MHFA_EVAL_01_ENABLED",
+        hasRestrictedData: Object.keys(freeText).length > 0,
+        generalPayload: scores,
+      },
+    };
+  },
+
+  "FORM-MHFA-013": (body) => {
+    const parsed = mhfaComplaintSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    // Entire form is Restricted (governance + CEO decision doc): narrative
+    // routes to TRAIN-19-equivalent protected storage, never general logs.
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-COMP-01",
+        featureFlag: "MHFA_COMP_01_ENABLED",
+        hasRestrictedData: true,
+        generalPayload: toGeneralComplaintPointer(parsed.data),
       },
     };
   },
