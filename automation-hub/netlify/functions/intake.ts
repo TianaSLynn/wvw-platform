@@ -24,6 +24,10 @@ import {
   toGeneralComplaintPointer,
 } from "../../packages/validation/src/mhfa-complaint.schema.js";
 import { mhfaCertificateCorrectionSchema } from "../../packages/validation/src/mhfa-certificate-correction.schema.js";
+import {
+  mhfaPreworkSupportSchema,
+  mhfaPaymentReconciliationSchema,
+} from "../../packages/validation/src/mhfa-postwork.schema.js";
 
 /**
  * POST /.netlify/functions/intake
@@ -169,6 +173,38 @@ const FORM_HANDLERS: Record<string, FormHandler> = {
         domain: "MHFA",
         automationCode: "MHFA-CERT-CORR-01",
         featureFlag: "MHFA_CERT_CORR_01_ENABLED",
+        hasRestrictedData: false,
+        generalPayload: parsed.data,
+      },
+    };
+  },
+
+  "FORM-MHFA-010": (body) => {
+    const parsed = mhfaPreworkSupportSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-POST-01",
+        featureFlag: "MHFA_POST_01_ENABLED",
+        hasRestrictedData: false,
+        generalPayload: parsed.data,
+      },
+    };
+  },
+
+  "FORM-MHFA-016": (body) => {
+    const parsed = mhfaPaymentReconciliationSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-POST-01",
+        featureFlag: "MHFA_POST_01_ENABLED",
         hasRestrictedData: false,
         generalPayload: parsed.data,
       },
