@@ -4,17 +4,17 @@
 
 | Reference | Location | Classification | Target state |
 |---|---|---|---|
-| AUTO-01 Public Registration Intake | Zapier (live) / Notion Automation Registry | Active | Replace with MHFA-REG-01 on the hub once built + tested + approved. Zap disabled by Tiána at cutover, not deleted (audit trail preserved). |
+| AUTO-01 Public Registration Intake | Zapier (live) / Notion Automation Registry | Active | Replacement (MHFA-REG-01) built + dev-tested on the hub, feature-flagged off. Not yet cut over — Zap stays authoritative until Tiána approves and disables it (audit trail preserved, not deleted). |
 | AUTO-02 Payment Confirmation | Zapier (live) | Active | Replace after AUTO-01; depends on Wave integration existing first. |
 | AUTO-03 Payment Reminder / Expiration | Zapier (live) | Active | Replace after AUTO-02. |
-| AUTO-04 Group Inquiry Intake | Zapier (live) | Active | Replace via MHFA-GRP-01. |
+| AUTO-04 Group Inquiry Intake | Zapier (live) | Active | Replacement (MHFA-GRP-01) built + dev-tested on the hub, feature-flagged off. Not yet cut over. |
 | AUTO-05 Group Roster Import | Zapier (live) | Active | Replace via MHFA-GRP-02. CEO decision doc specifies a Microsoft Form + Excel roster upload trigger design — hub replacement must preserve this UX, not just the backend. |
 | AUTO-06 MHFA Connect Enrollment Readiness | Zapier (live) | Active | Replace after payment confirmation path exists. |
 | AUTO-07 Pre-Work Reminder | Zapier (live) | Active | Later phase. |
 | AUTO-08 Session Reminder Cadence | Zapier (live) | Active | Later phase. |
 | AUTO-09 Attendance and Closeout | Zapier (live) | Active | Later phase. |
 | AUTO-10 Certification Follow-Up | Zapier (live) | Active | Later phase. |
-| AUTO-11 Accommodation Alert | Zapier (live) | Active | Restricted-data path — build carefully, see MHFA-ACC-01. |
+| AUTO-11 Accommodation Alert | Zapier (live) | Active | Replacement (MHFA-ACC-01) built + dev-tested on the hub, feature-flagged off. Restricted-data path — entire form treated as Restricted; only a sanitized pointer is eligible for general logging. Not yet cut over. |
 | AUTO-12 Executive Dashboard Refresh | Zapier (live) | Active | Superseded by the hub's own dashboard metrics pipeline; replace last, only once source systems (above) are reliable — matches Tiána's own "Zapier Implementation Priority Order" note (dashboard refresh listed last for the same reason). |
 | AUTO-13 Exception Alert and Retry | Zapier (live) | Active | Hub has native exception handling (`automation_exceptions` table) from day one; still needs a defined cutover for the Zapier-side version. |
 | AUTO-14 Data Reconciliation | Zapier (live) | Active | Later phase; also relevant to closing out MHFA-01A. |

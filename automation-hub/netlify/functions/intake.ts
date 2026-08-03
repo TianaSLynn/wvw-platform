@@ -6,31 +6,103 @@ import {
   assertRequiredAcknowledgments,
   splitRestrictedFields,
 } from "../../packages/validation/src/mhfa-individual-registration.schema.js";
+import {
+  mhfaGroupTrainingInquirySchema,
+  splitGroupInquiryRestrictedFields,
+} from "../../packages/validation/src/mhfa-group-training-inquiry.schema.js";
+import {
+  mhfaAccommodationRequestSchema,
+  toGeneralAccommodationPointer,
+} from "../../packages/validation/src/mhfa-accommodation-request.schema.js";
 
 /**
  * POST /.netlify/functions/intake
  *
- * Governed intake gateway for MHFA-REG-01 (individual registration).
+ * Governed intake gateway. Each supported form has its own feature flag
+ * (governance rule 30 — new production-capable features default to
+ * inactive) and is only enabled after Tiána approves cutting that specific
+ * path over from its live Zap (see docs/ARCHITECTURE_DECISIONS.md ADR-001).
+ * Until then, every path validates and returns a dry-run result — nothing
+ * is persisted and nothing must be pointed at by a live form's Netlify
+ * Forms notification/webhook.
  *
- * Feature-flagged off by default (governance rule 30 — new production-capable
- * features default to inactive). Set MHFA_REG_01_ENABLED=true only after
- * Tiána has approved cutting this specific path over from the live Zap
- * (see docs/ARCHITECTURE_DECISIONS.md ADR-001). Until then this endpoint
- * validates and echoes a dry-run result — it does not persist anything and
- * must never be pointed at by a live form's Netlify Forms notification/webhook.
- *
- * Only mhfa-individual-registration is implemented. Other forms in
- * docs/FORM_REGISTRY.md are not yet handled here — see docs/IMPLEMENTATION_REGISTER.md.
+ * See docs/FORM_REGISTRY.md for the full form inventory; only the three
+ * forms below are implemented so far (docs/IMPLEMENTATION_REGISTER.md).
  */
 
-const SUPPORTED_FORMS = new Set(["mhfa-individual-registration"]);
+interface FormHandlerResult {
+  domain: string;
+  automationCode: string;
+  featureFlag: string;
+  hasRestrictedData: boolean;
+  generalPayload: Record<string, unknown>;
+}
+
+type FormHandler = (body: Record<string, unknown>) => { ok: true; result: FormHandlerResult } | { ok: false; status: number; body: unknown };
+
+const FORM_HANDLERS: Record<string, FormHandler> = {
+  "mhfa-individual-registration": (body) => {
+    const parsed = mhfaIndividualRegistrationSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    const missing = assertRequiredAcknowledgments(parsed.data);
+    if (missing.length > 0) {
+      return { ok: false, status: 422, body: { error: "missing_required_acknowledgments", fields: missing } };
+    }
+
+    const { general, restricted } = splitRestrictedFields(parsed.data);
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-REG-01",
+        featureFlag: "MHFA_REG_01_ENABLED",
+        hasRestrictedData: Object.keys(restricted).length > 0,
+        generalPayload: general,
+      },
+    };
+  },
+
+  "mhfa-group-training-inquiry": (body) => {
+    const parsed = mhfaGroupTrainingInquirySchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    const { general, restricted } = splitGroupInquiryRestrictedFields(parsed.data);
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-GRP-01",
+        featureFlag: "MHFA_GRP_01_ENABLED",
+        hasRestrictedData: Object.keys(restricted).length > 0,
+        generalPayload: general,
+      },
+    };
+  },
+
+  "mhfa-accommodation-request": (body) => {
+    const parsed = mhfaAccommodationRequestSchema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    // Entire form is Restricted (governance): only a sanitized pointer is
+    // ever eligible for a general-purpose payload/log.
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-ACC-01",
+        featureFlag: "MHFA_ACC_01_ENABLED",
+        hasRestrictedData: true,
+        generalPayload: toGeneralAccommodationPointer(parsed.data),
+      },
+    };
+  },
+};
 
 export const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== "POST") {
     return json(405, { error: "method_not_allowed" });
   }
-
-  const featureEnabled = process.env.MHFA_REG_01_ENABLED === "true";
 
   let body: Record<string, unknown>;
   try {
@@ -40,24 +112,20 @@ export const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const formName = String(body["form-name"] ?? body["form_name"] ?? "");
-  if (!SUPPORTED_FORMS.has(formName)) {
+  const formHandler = FORM_HANDLERS[formName];
+  if (!formHandler) {
     return json(422, { error: "unsupported_form", formName });
   }
 
-  const parsed = mhfaIndividualRegistrationSchema.safeParse(body);
-  if (!parsed.success) {
-    return json(422, { error: "validation_failed", issues: parsed.error.issues });
+  const outcome = formHandler(body);
+  if (!outcome.ok) {
+    return json(outcome.status, outcome.body);
   }
 
-  const missingAcknowledgments = assertRequiredAcknowledgments(parsed.data);
-  if (missingAcknowledgments.length > 0) {
-    return json(422, { error: "missing_required_acknowledgments", fields: missingAcknowledgments });
-  }
-
-  const { general, restricted } = splitRestrictedFields(parsed.data);
-  const correlationId = generateCorrelationId("MHFA", "MHFA-REG-01");
-  const payloadHash = canonicalPayloadHash(general);
-  const hasRestrictedData = Object.keys(restricted).length > 0;
+  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload } = outcome.result;
+  const featureEnabled = process.env[featureFlag] === "true";
+  const correlationId = generateCorrelationId(domain, automationCode);
+  const payloadHash = canonicalPayloadHash(generalPayload);
 
   // No persistence layer is wired up: both candidate Supabase projects are
   // paused pending approval (docs/DECISION_REGISTER.md, Decision 6). This
@@ -67,13 +135,14 @@ export const handler: Handler = async (event: HandlerEvent) => {
 
   return json(200, {
     status: featureEnabled ? "validated_not_persisted" : "dry_run_feature_disabled",
+    automationCode,
     correlationId,
     payloadHash,
     hasRestrictedData,
     persisted,
     note: featureEnabled
       ? "Validation passed. Supabase persistence is not yet connected — see docs/DECISION_REGISTER.md."
-      : "MHFA_REG_01_ENABLED is not set. This is a validation-only dry run; no automation was triggered.",
+      : `${featureFlag} is not set. This is a validation-only dry run; no automation was triggered.`,
   });
 };
 

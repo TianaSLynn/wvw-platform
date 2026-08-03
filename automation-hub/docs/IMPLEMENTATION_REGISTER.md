@@ -16,7 +16,9 @@ All entries below are at most **Dev-tested**. Nothing has been accepted, approve
 | Canonical payload hash (dedup) | Dev-tested | `packages/shared-types/src/payload-hash.ts`; verified key-order independence and content sensitivity |
 | MHFA-REG-01 validation schema, matched field-for-field against the live `mhfa-individual-registration` Netlify form | Dev-tested | `packages/validation/src/mhfa-individual-registration.schema.ts` |
 | Restricted-field splitting (accommodation summary never reaches general logs) | Dev-tested | Verified: restricted field correctly separated from general payload |
-| `POST /.netlify/functions/intake` for MHFA-REG-01 | Dev-tested, **feature-flagged off** (`MHFA_REG_01_ENABLED`) | Verified: valid submission → correlation ID + dry-run response; honeypot rejected; missing required acknowledgments → 422 with field list; unsupported form → 422 |
+| MHFA-GRP-01 validation schema, matched field-for-field against the live `mhfa-group-training-inquiry` Netlify form | Dev-tested | `packages/validation/src/mhfa-group-training-inquiry.schema.ts` |
+| MHFA-ACC-01 validation schema, matched field-for-field against the live `mhfa-accommodation-request` Netlify form | Dev-tested | `packages/validation/src/mhfa-accommodation-request.schema.ts` — entire form treated as Restricted; only a sanitized pointer (`accommodation-requested: true`, no content) is eligible for general logging, verified the pointer never contains the accommodation text |
+| `POST /.netlify/functions/intake` — dispatch table for MHFA-REG-01, MHFA-GRP-01, MHFA-ACC-01 | Dev-tested, **each path individually feature-flagged off** (`MHFA_REG_01_ENABLED`, `MHFA_GRP_01_ENABLED`, `MHFA_ACC_01_ENABLED`) | Verified: correct routing per form name, unsupported form → 422, regression-checked that the REG-01 path still works after the dispatch-table refactor |
 | Supabase core schema (`automation_events`, `workflow_executions`, `integration_mappings`, `automation_exceptions`, `communications_queue`, `dashboard_metrics`, `feature_flags`) | Designed, migration written | `supabase/migrations/0001_core_automation_tables.sql` — **not applied**, no active Supabase project (Decision 6 open) |
 | Supabase MHFA domain schema (`organizations`, `contacts`, `learners`, `sessions`, `registrations`, `payments`, `form_registry`) | Designed, migration written | `supabase/migrations/0002_mhfa_domain_tables.sql` — **not applied** |
 | Supabase persistence wiring for the intake function | Missing | Blocked on Decision 6 (which project, resume approval) |
@@ -24,7 +26,7 @@ All entries below are at most **Dev-tested**. Nothing has been accepted, approve
 | Microsoft Graph / Outlook draft creation | Missing | Session has a working Graph connection for read/search; draft-creation code not yet built |
 | Wave Pro integration | Missing | Blocked entirely — no credentials/connector available |
 | Apollo.io integration | Missing | Blocked entirely — no credentials/connector available |
-| MHFA-GRP-01, GRP-02, ACC-01, ATT-01, EVAL-01, CERT-CORR-01, COMP-01, POST-01, CERT-01, FUP-01, EMP-01 handlers | Missing | Not started — MHFA-REG-01 was built first as the highest-priority path per Tiána's own "Zapier Implementation Priority Order" note in the CEO decision doc |
+| MHFA-GRP-02, ATT-01, EVAL-01, CERT-CORR-01, COMP-01, POST-01, CERT-01, FUP-01, EMP-01 handlers | Missing | Not started. MHFA-REG-01, GRP-01, and ACC-01 are built; remaining paths follow Tiána's own "Zapier Implementation Priority Order" note in the CEO decision doc |
 | Executive dashboard app | Missing | Not started |
 | PAM executive intelligence | Missing | Not started |
 | CI/CD (GitHub Actions) | Missing | Not started |
