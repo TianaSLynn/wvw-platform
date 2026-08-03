@@ -47,11 +47,55 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
+// ClerkProvider throws synchronously if NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is
+// unset, which previously took down `next build` for every page in the app
+// (including pages with no auth requirement, like /_not-found) whenever a
+// build environment didn't have the key configured. Skipping the provider
+// in that case does NOT weaken access control: route protection for
+// (platform)/* goes through requireUser() in lib/auth.ts, which uses
+// @clerk/nextjs/server's auth() against CLERK_SECRET_KEY server-side and is
+// completely independent of this client-side provider. What this does
+// affect is client components that call Clerk's client hooks (useUser(),
+// <SignedIn>, etc.) — those will throw if rendered without a key configured,
+// which is a loud, visible failure rather than a silent auth bypass.
+const hasClerkPublishableKey = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+if (!hasClerkPublishableKey) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[wvw-platform] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set — rendering without ClerkProvider. " +
+      "Client-side Clerk components will not work in this build. Server-side route protection (requireUser()) is unaffected."
+  );
+}
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const body = (
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans`}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <QueryProvider>
+            {children}
+            <Toaster />
+            <CookieBanner />
+          </QueryProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+
+  if (!hasClerkPublishableKey) {
+    return body;
+  }
+
   return (
     <ClerkProvider
       appearance={{
@@ -66,22 +110,7 @@ export default function RootLayout({
         },
       }}
     >
-      <html lang="en" suppressHydrationWarning>
-        <body className={`${inter.variable} font-sans`}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <QueryProvider>
-              {children}
-              <Toaster />
-              <CookieBanner />
-            </QueryProvider>
-          </ThemeProvider>
-        </body>
-      </html>
+      {body}
     </ClerkProvider>
   );
 }
