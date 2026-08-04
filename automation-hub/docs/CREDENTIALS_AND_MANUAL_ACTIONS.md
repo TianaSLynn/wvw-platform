@@ -1,0 +1,16 @@
+# Credentials and Manual Actions Needed
+
+| Item | Needed for | Status | Action needed from Tiána |
+|---|---|---|---|
+| Wave Pro OAuth client ID/secret (or API key, per Wave's current developer platform) | Verifying payment status against the existing public Wave payment link (`https://link.waveapps.com/uun3sr-jm72jd`) and reconciling it to registrations | No connector in this session | Provide credentials. **Confirmed by Tiána (2026-08-04): keep using the existing public Wave web pay link as the payment collection UX — no custom checkout needs to be built.** Wave API access is only needed for *verifying* payment/invoice status against that link, matching the original architecture (Wave stays the authoritative source of payment truth; a redirect never counts as proof of payment). |
+| Apollo.io API key | Any real Apollo integration (org/people search, enrichment) | No connector in this session | Provide credentials |
+| Repo creation permission, or a manually-created empty `wvw-automation-hub` repo | Giving the hub its own repository instead of living inside `wvw-platform` | Blocked — 403 from GitHub App | Create the repo yourself and tell me to attach it, or authorize repo-creation scope for this integration |
+| Supabase project selection + resume approval | Applying the drafted schema migrations; any live automation_events/exceptions tracking | Both candidate projects (`wvw-command-center`, `WVW Dashboard`) paused | Confirm which project to use and approve resuming it (may affect billing) |
+| Notion database IDs for TRAIN-01, TRAIN-06, TRAIN-07, TRAIN-12, TRAIN-14, TRAIN-17, TRAIN-18, TRAIN-19, COMMS-02, COMMS-06 | Notion integration package (governance forbids inventing IDs) | Pages found and readable; individual database IDs not yet all confirmed | Confirm or point me to the MHFA-40 Forms & Intake Center / TRAIN-12 registry, which appears to already list these |
+| Confirmation of canonical form set (named forms vs. `FORM-MHFA-0xx` numbered forms) | Building the intake function against the right live schema | Both sets are live on Netlify; unclear which is authoritative | Confirm, or point to the Notion MHFA Form Registry (MHFA-40) which should already have this documented |
+| MHFA-01A incident status | Safe cutover of MHFA-REG-01 | Last evidence found (2026-07-30) shows 1 of 5 records still unresolved | Confirm current status |
+| Microsoft Graph app registration model (delegated vs. application permissions) | Outlook draft creation, mailbox search | Session has a working delegated Graph connection (`hello@wholisticvibeswellness.com`) via MCP, but this is the *session's* connection, not necessarily what a deployed Netlify/Supabase Edge Function would use in production | Confirm whether production email automation should reuse this delegated identity or need its own app registration — this is explicitly a rule-27 "document options, don't silently choose a high-privilege model" item |
+
+## Never requested
+
+Per governance, the following were deliberately never asked for or attempted: Wave/Apollo credentials were not guessed or faked; no Supabase project was resumed without asking; no new Notion database was created; no email was sent; no production Netlify form destination was changed; no Zapier automation was disabled.

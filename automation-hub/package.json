@@ -1,0 +1,21 @@
+{
+  "name": "wvw-automation-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WVW Automation Hub — Netlify intake + Supabase orchestration for the WVW Executive Operating System. Isolated subtree inside wvw-platform pending its own repository.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.1",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^2.8.2",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
