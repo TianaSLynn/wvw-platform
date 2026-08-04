@@ -79,3 +79,32 @@ export function registrationToNotionProperties(reg: HubRegistration): Record<str
 
   return properties;
 }
+
+/**
+ * Builds a HubRegistration from a validated `mhfa-individual-registration`
+ * (named form) submission. registrationCode is system-generated from the
+ * correlation id's ULID, not a fabricated sequential number — there is no
+ * known real registration-numbering scheme to match against.
+ */
+export function namedRegistrationFormToHubRegistration(
+  data: Record<string, unknown>,
+  correlationId: string
+): HubRegistration {
+  const ulid = correlationId.split("|").pop() ?? correlationId;
+  return {
+    correlationId,
+    firstName: String(data["first-name"] ?? ""),
+    lastName: String(data["last-name"] ?? ""),
+    email: String(data["email"] ?? ""),
+    phone: data["phone"] ? String(data["phone"]) : undefined,
+    mhfaConnectEmail: data["mhfa-connect-email"] ? String(data["mhfa-connect-email"]) : undefined,
+    registrationCode: `REG-${ulid}`,
+    paymentStatus: "pending",
+    accommodationRequested: String(data["accommodation-needed"] ?? "").toLowerCase().startsWith("y"),
+  };
+}
+
+/** Same shape as namedRegistrationFormToHubRegistration, for FORM-MHFA-001 (numbered form). */
+export function formMhfa001ToHubRegistration(data: Record<string, unknown>, correlationId: string): HubRegistration {
+  return namedRegistrationFormToHubRegistration(data, correlationId);
+}
