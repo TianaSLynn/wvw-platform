@@ -19,6 +19,13 @@
 
 **Consequences:** Until cutover is explicitly approved per path, this hub has zero effect on production. All Netlify Functions / Supabase Edge Functions built here start feature-flagged off. This satisfies governance rules 14/15/30 (no production changes/activation without approval, new features default inactive).
 
+**Confirmed end state (Tiána, 2026-08-04): zero Zapier remaining when this migration is done.** This is a phased cutover in *sequence*, not in *scope* — the target is not "MHFA moves off Zapier, everything else stays." That includes:
+- All 14 MHFA automations (AUTO-01–14), the primary scope of this hub.
+- The separate, unrelated Zapier trigger found in `wvw-platform` itself during this work (`app/api/jobs/[id]/applications/route.ts`, job-application stage-change events — see the `fix/page-tsx-corrupted-diff-dump` PR history). This was out of scope for the build-fix that surfaced it, but is in scope for the overall no-Zapier goal and needs its own replacement plan.
+- Any other Zapier usage discovered elsewhere in the WVW systems as the audit continues.
+
+Nothing here is being torn out preemptively — each still needs its own built-and-tested replacement per ADR-001's phased approach before the corresponding Zap is disabled. This note exists so "no Zapier present" is tracked as the actual finish line, not just implied.
+
 ---
 
 ## ADR-002 — Hub code lives in `wvw-platform` as an isolated subtree, pending a dedicated repo

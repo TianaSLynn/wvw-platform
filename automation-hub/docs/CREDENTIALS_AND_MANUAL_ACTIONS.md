@@ -2,7 +2,7 @@
 
 | Item | Needed for | Status | Action needed from Tiána |
 |---|---|---|---|
-| Wave Pro OAuth client ID/secret (or API key, per Wave's current developer platform) | Any real Wave integration (invoice/payment lookup, webhook) | No connector in this session | Provide credentials, or confirm which Claude/session context already has Wave connected |
+| Wave Pro OAuth client ID/secret (or API key, per Wave's current developer platform) | Verifying payment status against the existing public Wave payment link (`https://link.waveapps.com/uun3sr-jm72jd`) and reconciling it to registrations | No connector in this session | Provide credentials. **Confirmed by Tiána (2026-08-04): keep using the existing public Wave web pay link as the payment collection UX — no custom checkout needs to be built.** Wave API access is only needed for *verifying* payment/invoice status against that link, matching the original architecture (Wave stays the authoritative source of payment truth; a redirect never counts as proof of payment). |
 | Apollo.io API key | Any real Apollo integration (org/people search, enrichment) | No connector in this session | Provide credentials |
 | Repo creation permission, or a manually-created empty `wvw-automation-hub` repo | Giving the hub its own repository instead of living inside `wvw-platform` | Blocked — 403 from GitHub App | Create the repo yourself and tell me to attach it, or authorize repo-creation scope for this integration |
 | Supabase project selection + resume approval | Applying the drafted schema migrations; any live automation_events/exceptions tracking | Both candidate projects (`wvw-command-center`, `WVW Dashboard`) paused | Confirm which project to use and approve resuming it (may affect billing) |
