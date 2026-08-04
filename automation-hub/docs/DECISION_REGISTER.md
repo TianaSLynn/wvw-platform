@@ -16,6 +16,8 @@ The Executive Decisions doc says do not reactivate MHFA-01A until 5 bad producti
 
 `wvw-website` and `wvw-academy` git repos contain no page source — only docs/config — yet 25 + 11 real forms exist live. Is there a repo I haven't been given access to, or are these sites maintained outside git? Until resolved, the hub only reads form *schemas* via the Netlify API; it does not edit site templates.
 
+**New evidence (2026-08-03):** the 25 live Netlify forms and Notion's own governing "MHFA Form Registry" database do not reference each other at all. The registry's `MHFA-REG-01` entry points to `wholisticvibeswellness.com/mhfa/upcoming-trainings/` (a native website form, Platform="Other") and lists only one real Microsoft Form (`MHFA-GRP-01`, Group Training Inquiry, `https://forms.cloud.microsoft/r/dqebX9K046`) — none of the `FORM-MHFA-001`–`016` or `mhfa-*` Netlify forms this hub's intake handlers are built against appear in that registry. Every row in the registry is also marked `Active = No`. This means there may be **two parallel, non-communicating form-building efforts** (Netlify-native vs. Microsoft Forms), and it's unclear which one is actually meant to be canonical going forward. Full findings sent to Tiána as `WVW_MHFA_FORMS_INVENTORY.md` outside this repo. This sharpens Decision 3: it's not just "where's the site source," it's "which form set should the hub actually be built against."
+
 ---
 
 ## Decision 4 — Canonical platform: `wvw-platform` vs. `wvw-master-intelligence` — OPEN, not blocking this work
