@@ -136,3 +136,8 @@ export function emailFilter(propertyName: string, email: string) {
 export function titleFilter(propertyName: string, value: string) {
   return { property: propertyName, title: { equals: value } };
 }
+
+/** Simple relation-contains filter helper for the common "search before create" case. */
+export function relationContainsFilter(propertyName: string, pageId: string) {
+  return { property: propertyName, relation: { contains: pageId } };
+}

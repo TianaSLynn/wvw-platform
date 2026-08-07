@@ -8,8 +8,8 @@
 | AUTO-02 Payment Confirmation | Zapier (live) | Active | Replace after AUTO-01; depends on Wave integration existing first. |
 | AUTO-03 Payment Reminder / Expiration | Zapier (live) | Active | Report-only replacement (MHFA-PAY-02) built + dev-tested, feature-flagged off. Full replacement blocked on two real gaps: MHFA-02 is missing the `24hr Reminder Sent`/`Final Reminder Sent` fields the real build sheet requires, and this hub has no email-send integration yet. Not cut over — Zap stays authoritative. |
 | AUTO-04 Group Inquiry Intake | Zapier (live) | Active | Replacement (MHFA-GRP-01) built + dev-tested on the hub, feature-flagged off. Not yet cut over. |
-| AUTO-05 Group Roster Import | Zapier (live) | Active | Replace via MHFA-GRP-02. CEO decision doc specifies a Microsoft Form + Excel roster upload trigger design — hub replacement must preserve this UX, not just the backend. |
-| AUTO-06 MHFA Connect Enrollment Readiness | Zapier (live) | Active | Replace after payment confirmation path exists. |
+| AUTO-05 Group Roster Import | Zapier (live) / Power Automate (per its own build sheet — inconsistent with its Platform field) | Active | **Blocked, not built.** Needs a real SharePoint site/library, workbook table name, and roster column list from Tiána — none discoverable without her, and the live build sheet's own Platform is ambiguous (Zapier per registry field vs. Power Automate per the build sheet itself). |
+| AUTO-06 MHFA Connect Enrollment Readiness | Zapier (live) | Active | Replacement (MHFA-CONNECT-01) built + dev-tested on the hub, feature-flagged off. Writes an internal MHFA-05 task only — no external MHFA Connect API call, matching the real build sheet's "no direct MHFA Connect API assumed." Not yet cut over. |
 | AUTO-07 Pre-Work Reminder | Zapier (live) | Active | Later phase. |
 | AUTO-08 Session Reminder Cadence | Zapier (live) | Active | Later phase. |
 | AUTO-09 Attendance and Closeout | Zapier (live) | Active | Attendance portion (MHFA-ATT-01) built + dev-tested on the hub, feature-flagged off. Closeout (session-level reconciliation) not yet built. Not yet cut over. |
