@@ -1,7 +1,7 @@
 import type { Handler } from "@netlify/functions";
 import { listBusinesses } from "../../packages/integration-wave/src/client.js";
 import { getCustomerBalances, findPaymentCandidates } from "../../packages/integration-wave/src/reconciliation.js";
-import { queryDataSource, NotionNotConfiguredError } from "../../packages/integration-notion/src/client.js";
+import { queryDatabaseLegacy, NotionNotConfiguredError } from "../../packages/integration-notion/src/client.js";
 
 /**
  * AUTO-02 Payment Confirmation replacement (MHFA-PAY-01) — REPORT ONLY.
@@ -17,7 +17,9 @@ import { queryDataSource, NotionNotConfiguredError } from "../../packages/integr
  * presence/absence in a response is consistent with the rest of the system.
  */
 
-const MHFA_02_DATA_SOURCE_ID = "eddb647d-50a5-44f1-b499-b2867d4c8725";
+// Database page ID (not data source ID) -- queryDatabaseLegacy uses the
+// pre-2025-09-03 /databases/{id}/query endpoint. See NOTION_MAPPING.md.
+const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== "GET") {
@@ -43,7 +45,7 @@ export const handler: Handler = async (event) => {
 
   let notionRegistrations: Array<{ email: string; registrationCode: string; pageId: string; paymentStatus: string }>;
   try {
-    const result = await queryDataSource(MHFA_02_DATA_SOURCE_ID, {
+    const result = await queryDatabaseLegacy(MHFA_02_DATABASE_ID, {
       property: "Payment Status",
       status: { does_not_equal: "Paid" },
     });
