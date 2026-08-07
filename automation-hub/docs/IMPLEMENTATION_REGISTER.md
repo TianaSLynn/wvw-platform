@@ -2,7 +2,11 @@
 
 Status key: **Designed** (documented, no code) · **Built** (code exists) · **Dev-tested** (verified locally) · **Accepted** (passed acceptance criteria with Tiána) · **Production Approved** · **Active**
 
-All entries below are at most **Dev-tested**. Nothing has been accepted, approved for production, or activated.
+**2026-08-07: MHFA-REG-01 is now Active in production** — the first automation path to go live, per Tiána's explicit approval (`MHFA_REG_01_ENABLED=true`). Verified end-to-end with a real, immediately-deleted test registration (Notion page created and confirmed, then archived). **This covers both `FORM-MHFA-001` and `mhfa-individual-registration`, since they share the same feature flag** — real registrations through either form now write to MHFA-02 | Learners & Registrations in Notion.
+
+**Immediate follow-up required, not yet done**: per ADR-001, a hub path going live means the corresponding Zapier automation for that exact trigger must be disabled by Tiána (not by this system) to avoid dual-processing the same registration into duplicate records. This has not happened yet — the old Zapier automation for individual registration is presumably still running in parallel.
+
+All other entries below are at most **Dev-tested**. Nothing else has been accepted, approved for production, or activated.
 
 | Component | Status | Evidence |
 |---|---|---|
