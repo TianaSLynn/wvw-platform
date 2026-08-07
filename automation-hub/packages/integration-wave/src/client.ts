@@ -66,24 +66,34 @@ export async function listBusinesses(): Promise<WaveBusiness[]> {
 
 export type WaveInvoiceStatus = "DRAFT" | "SAVED" | "SENT" | "VIEWED" | "PARTIAL" | "PAID" | "OVERDUE";
 
+export interface WaveInvoicePayment {
+  paymentDate: string;
+  amount: string;
+  paymentMethod: string;
+}
+
 export interface WaveInvoice {
   id: string;
   invoiceNumber: string;
   status: WaveInvoiceStatus;
   total: { value: string };
   amountDue: { value: string };
-  customer: { name: string };
+  amountPaid: { value: string };
+  customer: { name: string; email: string | null };
   createdAt: string;
   dueDate: string;
   lastSentAt: string | null;
   lastSentVia: string;
+  payments: WaveInvoicePayment[];
 }
 
 /**
- * Fetches invoices for a business, including delivery status. Wave's own
- * `status` field (e.g. OVERDUE) is purely due-date math and does NOT reflect
- * whether the invoice was actually sent — always check `lastSentVia` before
- * treating an invoice as "sent and awaiting payment" vs. "never sent."
+ * Fetches invoices for a business, including delivery status and payment
+ * records. Wave's own `status` field (e.g. OVERDUE) is purely due-date math
+ * and does NOT reflect whether the invoice was actually sent — always check
+ * `lastSentVia` before treating an invoice as "sent and awaiting payment" vs.
+ * "never sent." Real schema confirmed via introspection 2026-08-07 — Invoice
+ * has no direct `paidDate`; use `payments[].paymentDate` instead.
  */
 export async function getBusinessInvoices(businessId: string, page = 1, pageSize = 25): Promise<WaveInvoice[]> {
   const data = await waveGraphQL<{ business: { invoices: { edges: Array<{ node: WaveInvoice }> } } }>(
@@ -97,11 +107,13 @@ export async function getBusinessInvoices(businessId: string, page = 1, pageSize
               status
               total { value }
               amountDue { value }
-              customer { name }
+              amountPaid { value }
+              customer { name email }
               createdAt
               dueDate
               lastSentAt
               lastSentVia
+              payments { paymentDate amount paymentMethod }
             }
           }
         }
