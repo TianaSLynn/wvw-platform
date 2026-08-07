@@ -10,6 +10,8 @@ Status key: **Designed** (documented, no code) · **Built** (code exists) · **D
 
 **Bug found and fixed in the process**: `queryDataSource` (the `/data_sources/{id}/query` endpoint) 400s under this client's Notion-Version (`2022-06-28`) — it needs `2025-09-03`. Rather than bump the version globally (risking the page-creation path that MHFA-REG-01 depends on, which may need a different `parent` shape for database pages under the newer version), added `queryDatabaseLegacy` using the pre-2025-09-03 `/databases/{id}/query` endpoint. `queryDataSource` itself is now unused by anything in this codebase but left in place, documented, for whenever the version question gets resolved properly.
 
+**Ground truth confirmed by Tiána, 2026-08-07**: as of today, Wesley Shelter (both invoices, MHFA-2026-001 and -002) is the **only** confirmed-paid customer in Wave. The other ~39 individual Wave Customer records are prospective public MHFA registrants who were invoiced but did not follow through — not confirmed payments. This validates the design decision above: a naive `outstandingAmount === 0` match would have wrongly surfaced some of those 39 as "paid" candidates. Also corrected: FIN-01 and SALES-DB-09's MHFA-2026-002 records, originally backfilled 2026-08-04 when the invoice was $9,000 and unsent, now reflect its real, current state ($1,050, sent 2026-08-05, paid 2026-08-06).
+
 All other entries below are at most **Dev-tested**. Nothing else has been accepted, approved for production, or activated.
 
 | Component | Status | Evidence |
