@@ -2,6 +2,7 @@ import type { Handler } from "@netlify/functions";
 import { NotionNotConfiguredError, NotionApiError } from "../../packages/integration-notion/src/client.js";
 import { findReadyRegistrations, ensureReadinessQueueItems } from "../../packages/integration-notion/src/mhfa-connect-readiness-orchestration.js";
 import { generateCorrelationId } from "../../packages/shared-types/src/correlation-id.js";
+import { recordException } from "../../packages/integration-notion/src/exception-recorder-orchestration.js";
 
 /**
  * AUTO-06 MHFA Connect Enrollment Readiness replacement (MHFA-CONNECT-01).
@@ -49,6 +50,30 @@ export const handler: Handler = async (event) => {
     results = await ensureReadinessQueueItems(candidates, (registrationCode) => generateCorrelationId("MHFA", "MHFA-CONNECT-01"));
   } catch (err) {
     if (err instanceof NotionApiError) {
+      // AUTO-13 (MHFA-EXCEPTION-01) wiring: this is the one place in this
+      // hub where a write failure has an honest match among MHFA-05's real
+      // Exception Type options -- a failed write here means a registration
+      // that's missing MHFA Connect registration also failed to get
+      // queued for a human to handle, which "Missing MHFA Connect
+      // Registration" genuinely describes. Gated on its own flag (separate
+      // from MHFA_CONNECT_01_ENABLED) so this stays inert until that path
+      // is separately approved -- matches every other automation's
+      // explicit-approval-per-path pattern. Never let exception-recording
+      // itself break the real error response to the caller.
+      if (process.env.MHFA_EXCEPTION_01_ENABLED === "true") {
+        try {
+          await recordException({
+            correlationId: generateCorrelationId("MHFA", "MHFA-CONNECT-01"),
+            workflowCode: "WF-CONNECT",
+            exceptionType: "Missing MHFA Connect Registration",
+            severity: "High",
+            errorDetail: `mhfa-connect-readiness write failed: ${JSON.stringify({ status: err.status, body: err.body })}`,
+          });
+        } catch {
+          // Exception-recording is best-effort here -- the caller still
+          // needs the real notion_write_failed response below regardless.
+        }
+      }
       return json(502, {
         status: "notion_write_failed",
         notionError: { status: err.status, body: err.body },
