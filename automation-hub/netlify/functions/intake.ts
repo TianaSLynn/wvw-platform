@@ -42,6 +42,7 @@ import {
   formMhfa001ToHubRegistration,
   registrationToNotionProperties,
 } from "../../packages/integration-notion/src/mappers.js";
+import { createGroupOpportunity, type GroupOpportunityResult } from "../../packages/integration-notion/src/group-opportunity.js";
 
 // MHFA-02 | Learners & Registrations, confirmed live 2026-08-03 (docs/NOTION_MAPPING.md).
 const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
@@ -73,6 +74,15 @@ interface FormHandlerResult {
    * only, same as every other path today.
    */
   notionRegistration?: (correlationId: string) => ReturnType<typeof namedRegistrationFormToHubRegistration>;
+  /**
+   * MHFA-GRP-01 only: unlike notionRegistration (one synchronous mapping +
+   * one createPage call in the shared flow below), a group/private
+   * opportunity needs multiple Notion lookups/writes (find-or-create
+   * Organization, find-or-create Contact, then create Opportunity), so it
+   * owns its own async orchestration instead of fitting the single-createPage
+   * shape.
+   */
+  groupOpportunityWrite?: (correlationId: string) => Promise<GroupOpportunityResult>;
 }
 
 type FormHandler = (body: Record<string, unknown>) => { ok: true; result: FormHandlerResult } | { ok: false; status: number; body: unknown };
@@ -140,9 +150,7 @@ const FORM_HANDLERS: Record<string, FormHandler> = {
         featureFlag: "MHFA_GRP_01_ENABLED",
         hasRestrictedData: false,
         generalPayload: parsed.data,
-        // No Notion mapper yet -- FORM-MHFA-002 targets MHFA-03 Organizations
-        // & Group Opportunities, which mappers.ts doesn't cover yet. Dry-run
-        // only until that mapping is built (see IMPLEMENTATION_REGISTER.md).
+        groupOpportunityWrite: (correlationId) => createGroupOpportunity(parsed.data, correlationId),
       },
     };
   },
@@ -305,7 +313,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
     return json(outcome.status, outcome.body);
   }
 
-  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload, notionRegistration } = outcome.result;
+  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload, notionRegistration, groupOpportunityWrite } = outcome.result;
   const featureEnabled = process.env[featureFlag] === "true";
   const correlationId = generateCorrelationId(domain, automationCode);
   const payloadHash = canonicalPayloadHash(generalPayload);
@@ -368,6 +376,55 @@ export const handler: Handler = async (event: HandlerEvent) => {
           persisted: false,
           notionError: { status: err.status, body: err.body },
           note: "Notion API rejected the write -- see notionError for the real cause (commonly a missing integration capability).",
+        });
+      }
+      throw err;
+    }
+  }
+
+  // MHFA-GRP-01 only: a group/private opportunity needs multiple Notion
+  // lookups/writes (find-or-create Organization, find-or-create Contact,
+  // then create Opportunity) instead of the single createPage above.
+  if (groupOpportunityWrite) {
+    try {
+      const result = await groupOpportunityWrite(correlationId);
+      return json(200, {
+        status: "notion_write_succeeded",
+        automationCode,
+        correlationId,
+        payloadHash,
+        hasRestrictedData,
+        persisted: true,
+        notionPageId: result.opportunityPageId,
+        notionPageUrl: result.opportunityUrl,
+        organizationPageId: result.organizationPageId,
+        organizationCreated: result.organizationCreated,
+        contactPageId: result.contactPageId,
+        contactCreated: result.contactCreated,
+        note: "Written to MHFA-03 | Organizations & Group Opportunities (plus Organization and Contact records, created only if they didn't already exist). Supabase persistence is still not connected.",
+      });
+    } catch (err) {
+      if (err instanceof NotionNotConfiguredError) {
+        return json(502, {
+          status: "notion_not_configured",
+          automationCode,
+          correlationId,
+          payloadHash,
+          hasRestrictedData,
+          persisted: false,
+          note: `${featureFlag} is on but NOTION_API_KEY is not set — nothing was written. Fix the misconfiguration rather than treating this as success.`,
+        });
+      }
+      if (err instanceof NotionApiError) {
+        return json(502, {
+          status: "notion_write_failed",
+          automationCode,
+          correlationId,
+          payloadHash,
+          hasRestrictedData,
+          persisted: false,
+          notionError: { status: err.status, body: err.body },
+          note: "Notion API rejected a write in the Organization/Contact/Opportunity sequence -- see notionError. Any earlier step(s) in the sequence that already succeeded were NOT rolled back (see group-opportunity.ts for why).",
         });
       }
       throw err;

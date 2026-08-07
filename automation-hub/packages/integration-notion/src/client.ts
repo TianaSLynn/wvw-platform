@@ -131,3 +131,8 @@ export async function updatePage(pageId: string, properties: Record<string, unkn
 export function emailFilter(propertyName: string, email: string) {
   return { property: propertyName, email: { equals: email } };
 }
+
+/** Simple title-equals filter helper for the common "search before create" case. */
+export function titleFilter(propertyName: string, value: string) {
+  return { property: propertyName, title: { equals: value } };
+}
