@@ -6,7 +6,7 @@
 |---|---|---|---|
 | AUTO-01 Public Registration Intake | Zapier (live) / Notion Automation Registry | Active | Replacement (MHFA-REG-01) built + dev-tested on the hub, feature-flagged off. Not yet cut over — Zap stays authoritative until Tiána approves and disables it (audit trail preserved, not deleted). |
 | AUTO-02 Payment Confirmation | Zapier (live) | Active | Replace after AUTO-01; depends on Wave integration existing first. |
-| AUTO-03 Payment Reminder / Expiration | Zapier (live) | Active | Replace after AUTO-02. |
+| AUTO-03 Payment Reminder / Expiration | Zapier (live) | Active | Report-only replacement (MHFA-PAY-02) built + dev-tested, feature-flagged off. Full replacement blocked on two real gaps: MHFA-02 is missing the `24hr Reminder Sent`/`Final Reminder Sent` fields the real build sheet requires, and this hub has no email-send integration yet. Not cut over — Zap stays authoritative. |
 | AUTO-04 Group Inquiry Intake | Zapier (live) | Active | Replacement (MHFA-GRP-01) built + dev-tested on the hub, feature-flagged off. Not yet cut over. |
 | AUTO-05 Group Roster Import | Zapier (live) | Active | Replace via MHFA-GRP-02. CEO decision doc specifies a Microsoft Form + Excel roster upload trigger design — hub replacement must preserve this UX, not just the backend. |
 | AUTO-06 MHFA Connect Enrollment Readiness | Zapier (live) | Active | Replace after payment confirmation path exists. |
