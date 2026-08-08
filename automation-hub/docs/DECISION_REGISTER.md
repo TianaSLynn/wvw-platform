@@ -32,9 +32,11 @@ Used `wvw-platform/automation-hub/` as an isolated, extractable subtree (ADR-002
 
 ---
 
-## Decision 6 — Resuming paused Supabase projects — OPEN
+## Decision 6 — Persistence project — RESOLVED 2026-08-07
 
-`wvw-command-center` and `WVW Dashboard` are both paused; resuming either may affect billing. Schema migrations are drafted (`supabase/migrations/`) but **not applied** pending this approval. Which project (or a new one) should the hub use?
+Superseded: not Supabase. Tiána directed this hub to use the existing "wvw-platform" Neon project (`frosty-hill-13583502`), confirmed live via a real Neon API key. The `supabase/migrations/` SQL (0001, 0002) is generic Postgres DDL and was applied as-is against that project's `neondb` database on 2026-08-07 -- the directory name is legacy and no longer implies Supabase specifically.
+
+**Confirmed intentional (Tiána, 2026-08-07): `neondb` is shared with an existing, unrelated business-ops application** (Prisma-managed, PascalCase tables like `User`, `Organization`, `Invoice`, `Client`, `Project` -- likely backing the `wvw-command` Netlify site). This hub's own tables are lowercase/snake_case and confirmed non-colliding. `DATABASE_URL` is set as a secret Netlify env var (production context) on `wvw-automation-hub`. `packages/integration-postgres/` wraps `@neondatabase/serverless`; `workflow_executions` logging is wired into `intake.ts` (every real terminal outcome, not the disabled-dry-run case), gated on its own flag `PERSISTENCE_LOG_ENABLED` (off by default, additive/best-effort, never blocks the real response). Not yet wired into any of the report-only/read-only functions built after `intake.ts` -- that's a separate follow-up.
 
 ---
 

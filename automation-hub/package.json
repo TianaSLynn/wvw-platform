@@ -9,8 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^3.24.1",
-    "ulid": "^2.3.0"
+    "@neondatabase/serverless": "^1.1.0",
+    "ulid": "^2.3.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@netlify/functions": "^2.8.2",

@@ -43,6 +43,7 @@ import {
   registrationToNotionProperties,
 } from "../../packages/integration-notion/src/mappers.js";
 import { createGroupOpportunity, type GroupOpportunityResult } from "../../packages/integration-notion/src/group-opportunity.js";
+import { logWorkflowExecution } from "../../packages/integration-postgres/src/workflow-log.js";
 
 // MHFA-02 | Learners & Registrations, confirmed live 2026-08-03 (docs/NOTION_MAPPING.md).
 const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
@@ -318,10 +319,11 @@ export const handler: Handler = async (event: HandlerEvent) => {
   const correlationId = generateCorrelationId(domain, automationCode);
   const payloadHash = canonicalPayloadHash(generalPayload);
 
-  // Supabase (the intended durable system of record) is still not wired up:
-  // both candidate projects are paused pending approval (Decision 6). This
-  // function stays honest about that rather than claiming a write that
-  // didn't happen (governance: "Do not represent mock data as production data").
+  // Notion remains the system of record for this hub (ADR-003). "persisted"
+  // here reflects whether a real Notion write happened for THIS response,
+  // not whether a workflow_executions audit-log row was also written --
+  // that's a separate, best-effort side effect (see logWorkflowExecution
+  // calls below), gated on its own flag, and never changes this value.
   const persisted = false;
 
   if (!featureEnabled) {
@@ -343,6 +345,14 @@ export const handler: Handler = async (event: HandlerEvent) => {
     try {
       const registration = notionRegistration(correlationId);
       const page = await createPage(MHFA_02_DATABASE_ID, registrationToNotionProperties(registration));
+      await logWorkflowExecution({
+        correlationId,
+        automationCode,
+        status: "completed",
+        trigger: formName,
+        inputSnapshot: generalPayload,
+        outputSnapshot: { notionPageId: page.id, notionPageUrl: page.url },
+      });
       return json(200, {
         status: "notion_write_succeeded",
         automationCode,
@@ -352,10 +362,20 @@ export const handler: Handler = async (event: HandlerEvent) => {
         persisted: true,
         notionPageId: page.id,
         notionPageUrl: page.url,
-        note: "Written to MHFA-02 | Learners & Registrations. Supabase persistence is still not connected.",
+        note: "Written to MHFA-02 | Learners & Registrations.",
       });
     } catch (err) {
       if (err instanceof NotionNotConfiguredError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: "notion_not_configured",
+          errorSummary: "NOTION_API_KEY is not set",
+          retryable: true,
+        });
         return json(502, {
           status: "notion_not_configured",
           automationCode,
@@ -367,6 +387,16 @@ export const handler: Handler = async (event: HandlerEvent) => {
         });
       }
       if (err instanceof NotionApiError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: `notion_api_error_${err.status}`,
+          errorSummary: JSON.stringify(err.body),
+          retryable: true,
+        });
         return json(502, {
           status: "notion_write_failed",
           automationCode,
@@ -388,6 +418,19 @@ export const handler: Handler = async (event: HandlerEvent) => {
   if (groupOpportunityWrite) {
     try {
       const result = await groupOpportunityWrite(correlationId);
+      await logWorkflowExecution({
+        correlationId,
+        automationCode,
+        status: "completed",
+        trigger: formName,
+        inputSnapshot: generalPayload,
+        outputSnapshot: {
+          notionPageId: result.opportunityPageId,
+          notionPageUrl: result.opportunityUrl,
+          organizationPageId: result.organizationPageId,
+          contactPageId: result.contactPageId,
+        },
+      });
       return json(200, {
         status: "notion_write_succeeded",
         automationCode,
@@ -401,10 +444,20 @@ export const handler: Handler = async (event: HandlerEvent) => {
         organizationCreated: result.organizationCreated,
         contactPageId: result.contactPageId,
         contactCreated: result.contactCreated,
-        note: "Written to MHFA-03 | Organizations & Group Opportunities (plus Organization and Contact records, created only if they didn't already exist). Supabase persistence is still not connected.",
+        note: "Written to MHFA-03 | Organizations & Group Opportunities (plus Organization and Contact records, created only if they didn't already exist).",
       });
     } catch (err) {
       if (err instanceof NotionNotConfiguredError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: "notion_not_configured",
+          errorSummary: "NOTION_API_KEY is not set",
+          retryable: true,
+        });
         return json(502, {
           status: "notion_not_configured",
           automationCode,
@@ -416,6 +469,16 @@ export const handler: Handler = async (event: HandlerEvent) => {
         });
       }
       if (err instanceof NotionApiError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: `notion_api_error_${err.status}`,
+          errorSummary: JSON.stringify(err.body),
+          retryable: true,
+        });
         return json(502, {
           status: "notion_write_failed",
           automationCode,
@@ -431,6 +494,14 @@ export const handler: Handler = async (event: HandlerEvent) => {
     }
   }
 
+  await logWorkflowExecution({
+    correlationId,
+    automationCode,
+    status: "completed_with_warning",
+    trigger: formName,
+    inputSnapshot: generalPayload,
+    outputSnapshot: { note: "validated_not_persisted -- no Notion mapping exists yet for this path" },
+  });
   return json(200, {
     status: "validated_not_persisted",
     automationCode,
@@ -438,7 +509,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
     payloadHash,
     hasRestrictedData,
     persisted,
-    note: "Validation passed. No Notion mapping exists yet for this path, and Supabase persistence is not connected — see docs/DECISION_REGISTER.md.",
+    note: "Validation passed. No Notion mapping exists yet for this path — see docs/IMPLEMENTATION_REGISTER.md.",
   });
 };
 
