@@ -44,6 +44,7 @@ import {
 } from "../../packages/integration-notion/src/mappers.js";
 import { createGroupOpportunity, type GroupOpportunityResult } from "../../packages/integration-notion/src/group-opportunity.js";
 import { logWorkflowExecution } from "../../packages/integration-postgres/src/workflow-log.js";
+import { sendRegistrationAlert } from "../../packages/integration-email/src/registration-alert.js";
 
 // MHFA-02 | Learners & Registrations, confirmed live 2026-08-03 (docs/NOTION_MAPPING.md).
 const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
@@ -353,6 +354,12 @@ export const handler: Handler = async (event: HandlerEvent) => {
         inputSnapshot: generalPayload,
         outputSnapshot: { notionPageId: page.id, notionPageUrl: page.url },
       });
+      await sendRegistrationAlert({
+        automationCode,
+        correlationId,
+        notionPageUrl: page.url,
+        generalPayload,
+      });
       return json(200, {
         status: "notion_write_succeeded",
         automationCode,
@@ -430,6 +437,12 @@ export const handler: Handler = async (event: HandlerEvent) => {
           organizationPageId: result.organizationPageId,
           contactPageId: result.contactPageId,
         },
+      });
+      await sendRegistrationAlert({
+        automationCode,
+        correlationId,
+        notionPageUrl: result.opportunityUrl,
+        generalPayload,
       });
       return json(200, {
         status: "notion_write_succeeded",
