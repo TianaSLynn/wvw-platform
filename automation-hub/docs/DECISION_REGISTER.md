@@ -40,6 +40,16 @@ Superseded: not Supabase. Tiána directed this hub to use the existing "wvw-plat
 
 ---
 
+## Decision 7 — Email alerts — RESOLVED 2026-08-11
+
+Tiána asked whether the hub could email/alert her on activity; it couldn't -- no email-sending capability existed anywhere in the codebase. Resolved: Resend, chosen and confirmed by Tiána. First trigger scoped to registration/inquiry alerts only (failure/exception alerts to follow as a separate, later-approved path -- same incremental pattern as every other automation here).
+
+Tiána's first choice for the sending domain was `wholisticvibeswellness.com`, but it isn't verified in Resend (no DNS records added) -- rather than block on DNS setup, she chose to proceed on `wvwacademy.com`, which was already verified in this Resend account since 2026-05-04. Sender: `automation@wvwacademy.com`. Recipient: `hello@wholisticvibeswellness.com`. `RESEND_API_KEY` is set as a secret Netlify env var (production context) on `wvw-automation-hub`.
+
+`packages/integration-email/` wraps the Resend HTTP API directly (no SDK dependency needed for one POST call) and wires a best-effort `sendRegistrationAlert` into `intake.ts`'s two live Notion-write-succeeded paths (MHFA-REG-01, MHFA-GRP-01). Content is built from `generalPayload` only -- the same restricted-field-free data already used for `workflow_executions` logging, never the raw submission. Gated on its own flag (`EMAIL_ALERT_REG_ENABLED`), verified with a real test send before going live, then turned on in production 2026-08-11 per Tiána's confirmation the test email arrived.
+
+---
+
 ## Manual actions needed (not blocking hub build, blocking specific integrations)
 
 - **Wave Pro API credentials** — no connector available in this session. Needed for any real Wave integration (OAuth client ID/secret minimum).
