@@ -25,6 +25,15 @@ import { logWorkflowExecution } from "../../packages/integration-postgres/src/wo
  */
 
 export const handler: Handler = async (event: HandlerEvent) => {
+  // Some webhook providers (possibly including Wave's own dashboard) probe
+  // an endpoint with GET/HEAD before allowing it to be saved, to confirm
+  // it's reachable. Answer that harmlessly instead of rejecting it -- only
+  // POST is ever treated as a real event, and only after signature
+  // verification below.
+  if (event.httpMethod === "GET" || event.httpMethod === "HEAD") {
+    return json(200, { status: "ok", note: "wave-webhook endpoint is reachable. Real events must be POSTed with a valid x-wave-signature header." });
+  }
+
   if (event.httpMethod !== "POST") {
     return json(405, { error: "method_not_allowed" });
   }
