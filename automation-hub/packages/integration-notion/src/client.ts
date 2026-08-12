@@ -120,6 +120,10 @@ export async function createPage(databaseId: string, properties: Record<string, 
   }) as Promise<NotionPage>;
 }
 
+export async function getPage(pageId: string): Promise<NotionPage> {
+  return notionFetch(`/pages/${pageId}`, { method: "GET" }) as Promise<NotionPage>;
+}
+
 export async function updatePage(pageId: string, properties: Record<string, unknown>): Promise<NotionPage> {
   return notionFetch(`/pages/${pageId}`, {
     method: "PATCH",

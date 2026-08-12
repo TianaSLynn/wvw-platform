@@ -50,6 +50,32 @@ Tiána's first choice for the sending domain was `wholisticvibeswellness.com`, b
 
 ---
 
+## Decision 8 — Two disconnected Session/Registration systems found — RESOLVED 2026-08-11
+
+While scoping MHFA-COMM-001, discovered that the live registration form has never written to `TRAIN-03`/`TRAIN-05`/`TRAIN-06` (TRAIN OS) at all -- it writes to `MHFA-01 | Training Sessions` and `MHFA-02 | Learners & Registrations` (MHFA Program Hub), a separate, disconnected pair of databases with different IDs and schemas. Tiána's detailed requirements spec for MHFA-COMM-001 was written against TRAIN-03/05/06. **Resolved: build against MHFA-01/02 (what's actually live)**, not TRAIN-03/05/06 (the intended-future system nothing has ever been connected to). Consolidating the two systems is a separate, not-yet-started cleanup project.
+
+## Decision 9 — Wave payment link vs. automated invoice creation — RESOLVED then REOPENED
+
+Initially resolved 2026-08-11: reuse the existing static Wave pay link (`https://link.waveapps.com/uun3sr-jm72jd`) as `PaymentURL` rather than build per-registration invoice creation, per Tiána's original 2026-08-04 decision to avoid custom checkout. Reopened same day when Tiána asked to "connect everything" -- but every Wave API token tested (5 tokens across 4 auth header formats, plus an OAuth `client_credentials` exchange) failed identically, including a token freshly created during testing. This points to a Wave account/application configuration issue, not a token-generation mistake -- referred to Wave support, not resolvable from this hub. **Real automated invoice creation remains blocked**; the static link stays as `PaymentURL` in the meantime.
+
+**Update 2026-08-12:** Tiána reports that during live testing, registration *did* produce an individual Wave invoice -- created by the **old Zapier automation**, which was still connected at the time of the test. This corrects the earlier assumption (from `docs/CREDENTIALS_AND_MANUAL_ACTIONS.md`) that Wave's Zapier integration couldn't create invoices -- that finding was specifically about the *absence of an Invoice Paid/Payment Received trigger* for reading status back, not about invoice creation, which apparently worked. Tiána has since fully disconnected Zapier from Wave, Notion, etc., removing that invoice-creation path entirely. **New gap**: individual per-registration invoices are no longer created by anything, automated or otherwise, until the Wave token issue is resolved. Tiána will create invoices manually per registration in the interim (her explicit choice, not a hub decision).
+
+## Decision 10 — COMMS-02 governance workflow and MHFA-02 snapshot fields — RESOLVED 2026-08-12
+
+Tiána provided the exact `MHFA-COMM-001` requirements (real field sources, $225 flat public price, 48-hour payment window, `MHFA-REG-YYYY-NNNN` reference format, exact signature text) and a formal template-activation workflow. Implemented:
+
+- `Test Status` on `COMMS-02` repurposed from a 5-value testing-only field into Tiána's 7-stage activation lifecycle (`Draft` → `Copy Approved` → `Test Ready` → `Test Sent` → `Test Passed` → `Approved for Activation` → `Active`); `getActiveTemplate` now gates on `Test Status = "Active"`, replacing the old `Active` checkbox gate.
+- 9 new snapshot fields added to `MHFA-02` (`SessionIDSnapshot`, `SessionDateTimeSnapshot`, `SessionTimezoneSnapshot`, `CourseNameSnapshot`, `PaymentURL`, `RegistrationReference`, `PricingRuleApplied`, `ValuesCalculatedAt`, `CommunicationVersion`) -- 3 of Tiána's originally-requested 12 fields were folded into existing fields instead of duplicated (`RelatedSession`→`Session`, `AmountDue`→`Amount Due`, `PaymentDeadline`→`Payment Deadline`).
+- **Tool limitation found**: `notion-update-data-source` (schema/property changes) reports success but silently does not persist the change -- confirmed twice (a select-option edit and a new-property add). Both schema changes had to be made manually by Tiána in Notion's UI; verified via fresh fetch afterward that they actually took. `notion-update-page` (page content/property values) works correctly and was used for all data writes.
+- Missing/invalid session data now stops the send and records a high-priority "Email Failure" exception in `MHFA-05` (the real, live equivalent of the `TRAIN-18` queue Tiána referenced -- see Decision 8), gated on `MHFA_EXCEPTION_01_ENABLED`.
+- Verified end-to-end via a temporary, isolated test endpoint (deployed, hit once, removed immediately after) against a real `MHFA-01` session: real template fetch, real render, real send via Resend all succeeded.
+
+## Decision 11 — Group inquiry confirmation gap — OPEN, not yet started
+
+Now that Zapier is fully disconnected (per Tiána, 2026-08-12), the old Zapier-driven confirmation email for group/private training inquiries (`Email 13` / `MHFA-COMM-007`, Trigger "Inquiry Received") has also stopped firing. This hub never built a replacement -- `MHFA-COMM-007` was scoped as "honestly buildable now" back when email alerts were first introduced (all required fields exist on both group-inquiry forms), but work shifted to `MHFA-COMM-001` before it was built. **Individual registrations are covered (`MHFA-COMM-001`); group inquiries currently receive no confirmation email at all.** Next priority.
+
+---
+
 ## Manual actions needed (not blocking hub build, blocking specific integrations)
 
 - **Wave Pro API credentials** — no connector available in this session. Needed for any real Wave integration (OAuth client ID/secret minimum).
