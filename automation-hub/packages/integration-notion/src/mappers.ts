@@ -18,6 +18,44 @@ export interface HubRegistration {
   accommodationRequested: boolean;
   sessionPageId?: string; // resolved MHFA-01 Notion page id, if known
   organizationPageId?: string; // resolved MHFA-03 Notion page id, if known
+  amountDue?: number; // existing "Amount Due" field -- reused, not duplicated, for Decision 10's snapshot requirement
+  paymentDeadline?: Date; // existing "Payment Deadline" field -- same reuse
+}
+
+/**
+ * The 9 fields Tiána approved 2026-08-12 (Decision 10) that do NOT already
+ * exist on MHFA-02 -- RelatedSession/AmountDue/PaymentDeadline were folded
+ * into the existing Session/Amount Due/Payment Deadline fields instead of
+ * duplicating them (see registrationToNotionProperties). Kept as a
+ * separate best-effort update (see intake.ts) because these properties
+ * don't exist on the live database until Tiána adds them manually --
+ * Notion's API 400s on an unknown property, so this must never be merged
+ * into the same call as the real registration write.
+ */
+export interface RegistrationSnapshot {
+  sessionIdSnapshot?: string;
+  sessionDateTimeSnapshot?: string;
+  sessionTimezoneSnapshot?: string;
+  courseNameSnapshot?: string;
+  paymentUrl?: string;
+  registrationReference?: string;
+  pricingRuleApplied?: string;
+  valuesCalculatedAt?: Date;
+  communicationVersion?: number;
+}
+
+export function registrationSnapshotToNotionProperties(snapshot: RegistrationSnapshot): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  if (snapshot.sessionIdSnapshot !== undefined) properties.SessionIDSnapshot = { rich_text: [{ text: { content: snapshot.sessionIdSnapshot } }] };
+  if (snapshot.sessionDateTimeSnapshot !== undefined) properties.SessionDateTimeSnapshot = { rich_text: [{ text: { content: snapshot.sessionDateTimeSnapshot } }] };
+  if (snapshot.sessionTimezoneSnapshot !== undefined) properties.SessionTimezoneSnapshot = { rich_text: [{ text: { content: snapshot.sessionTimezoneSnapshot } }] };
+  if (snapshot.courseNameSnapshot !== undefined) properties.CourseNameSnapshot = { rich_text: [{ text: { content: snapshot.courseNameSnapshot } }] };
+  if (snapshot.paymentUrl !== undefined) properties.PaymentURL = { url: snapshot.paymentUrl };
+  if (snapshot.registrationReference !== undefined) properties.RegistrationReference = { rich_text: [{ text: { content: snapshot.registrationReference } }] };
+  if (snapshot.pricingRuleApplied !== undefined) properties.PricingRuleApplied = { rich_text: [{ text: { content: snapshot.pricingRuleApplied } }] };
+  if (snapshot.valuesCalculatedAt !== undefined) properties.ValuesCalculatedAt = { date: { start: snapshot.valuesCalculatedAt.toISOString() } };
+  if (snapshot.communicationVersion !== undefined) properties.CommunicationVersion = { number: snapshot.communicationVersion };
+  return properties;
 }
 
 // Notion's real Payment Status options: Pending, Invoiced, Payment Review,
@@ -76,6 +114,8 @@ export function registrationToNotionProperties(reg: HubRegistration): Record<str
   if (reg.attendanceStatus) properties["Attendance Status"] = { status: { name: reg.attendanceStatus } };
   if (reg.sessionPageId) properties.Session = { relation: [{ id: reg.sessionPageId }] };
   if (reg.organizationPageId) properties.Organization = { relation: [{ id: reg.organizationPageId }] };
+  if (reg.amountDue !== undefined) properties["Amount Due"] = { number: reg.amountDue };
+  if (reg.paymentDeadline) properties["Payment Deadline"] = { date: { start: reg.paymentDeadline.toISOString() } };
 
   return properties;
 }

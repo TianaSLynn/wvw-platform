@@ -22,6 +22,7 @@ const TIME_ZONE_IANA_MAP: Record<string, string> = {
 
 export interface Mhfa01Session {
   pageId: string;
+  sessionId?: number; // auto_increment_id
   sessionCode: string;
   courseName?: string;
   startDate?: string; // ISO date, e.g. "2026-09-15"
@@ -29,6 +30,17 @@ export interface Mhfa01Session {
   timeZoneAbbreviation?: string; // "ET", "CT", etc.
   timeZoneIana?: string; // "America/New_York", derived -- undefined if abbreviation isn't a known mapping
   deliveryFormat?: string;
+  location?: string;
+  teamsLink?: string;
+  zoomLink?: string;
+}
+
+/** Best-effort "where to show up" string -- real fields only, no invented default. */
+export function derivePlatformOrLocation(session: Mhfa01Session): string | undefined {
+  if (session.deliveryFormat === "Virtual") {
+    return session.teamsLink || session.zoomLink || undefined;
+  }
+  return session.location || session.teamsLink || session.zoomLink || undefined;
 }
 
 /** Search-before-create governance: find the real session a form's `selected-session` value refers to. Returns null (not an error) if no match -- caller decides how to handle a genuinely missing session. */
@@ -42,6 +54,7 @@ export async function findSessionByCode(sessionCode: string): Promise<Mhfa01Sess
 
   return {
     pageId: page.id,
+    sessionId: props["Session ID"]?.unique_id?.number ?? props["Session ID"]?.number,
     sessionCode: props["Session Code"]?.title?.[0]?.plain_text ?? sessionCode,
     courseName: props["Course Name"]?.rich_text?.[0]?.plain_text,
     startDate: props["Start Date"]?.date?.start,
@@ -49,6 +62,9 @@ export async function findSessionByCode(sessionCode: string): Promise<Mhfa01Sess
     timeZoneAbbreviation,
     timeZoneIana: timeZoneAbbreviation ? TIME_ZONE_IANA_MAP[timeZoneAbbreviation] : undefined,
     deliveryFormat: props["Delivery Format"]?.select?.name,
+    location: props["Location"]?.rich_text?.[0]?.plain_text,
+    teamsLink: props["Teams/Virtual Link"]?.url,
+    zoomLink: props["Zoom Link"]?.url,
   };
 }
 

@@ -36,16 +36,18 @@ import {
   formMhfa002Schema,
   assertRequiredAcknowledgments as assertFormMhfa002Acknowledgments,
 } from "../../packages/validation/src/form-mhfa-002.schema.js";
-import { createPage, NotionNotConfiguredError, NotionApiError } from "../../packages/integration-notion/src/client.js";
+import { createPage, updatePage, NotionNotConfiguredError, NotionApiError } from "../../packages/integration-notion/src/client.js";
 import {
   namedRegistrationFormToHubRegistration,
   formMhfa001ToHubRegistration,
   registrationToNotionProperties,
+  registrationSnapshotToNotionProperties,
 } from "../../packages/integration-notion/src/mappers.js";
 import { createGroupOpportunity, type GroupOpportunityResult } from "../../packages/integration-notion/src/group-opportunity.js";
 import { logWorkflowExecution } from "../../packages/integration-postgres/src/workflow-log.js";
 import { sendRegistrationAlert } from "../../packages/integration-email/src/registration-alert.js";
-import { sendSeatRequestReceivedEmail } from "../../packages/integration-email/src/registration-confirmation.js";
+import { computeSeatRequestPlan, sendSeatRequestReceivedEmail } from "../../packages/integration-email/src/registration-confirmation.js";
+import { recordException } from "../../packages/integration-notion/src/exception-recorder-orchestration.js";
 
 // MHFA-02 | Learners & Registrations, confirmed live 2026-08-03 (docs/NOTION_MAPPING.md).
 const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
@@ -367,7 +369,48 @@ export const handler: Handler = async (event: HandlerEvent) => {
   if (notionRegistration) {
     try {
       const registration = notionRegistration(correlationId);
+
+      // Step 1-2 of Tiána's required workflow (Decision 10): retrieve
+      // session, calculate deadline and price, BEFORE the registration
+      // write, so the computed values can be saved onto the record itself
+      // rather than existing only during email generation.
+      const commEnabled = Boolean(seatConfirmationInput) && process.env.MHFA_COMM_001_ENABLED === "true";
+      const planResult = commEnabled ? await computeSeatRequestPlan(seatConfirmationInput!) : undefined;
+      if (planResult?.ok) {
+        registration.sessionPageId = planResult.plan.session.pageId;
+        registration.amountDue = planResult.plan.amountDueUsd;
+        registration.paymentDeadline = planResult.plan.paymentDeadline;
+      }
+
       const page = await createPage(MHFA_02_DATABASE_ID, registrationToNotionProperties(registration));
+
+      // Step 4 (partial): save the new snapshot fields Tiána approved
+      // 2026-08-12. Separate, best-effort call -- these properties don't
+      // exist on the live MHFA-02 schema until she adds them manually
+      // (Notion 400s on unknown properties), so this must never be able to
+      // break the real registration write above.
+      if (planResult?.ok) {
+        try {
+          const { plan } = planResult;
+          await updatePage(
+            page.id,
+            registrationSnapshotToNotionProperties({
+              sessionIdSnapshot: plan.session.sessionId !== undefined ? String(plan.session.sessionId) : undefined,
+              sessionDateTimeSnapshot: [plan.session.startDate, plan.session.startTime].filter(Boolean).join(" ") || undefined,
+              sessionTimezoneSnapshot: plan.session.timeZoneAbbreviation,
+              courseNameSnapshot: plan.session.courseName,
+              paymentUrl: plan.paymentUrl,
+              registrationReference: plan.registrationReference,
+              pricingRuleApplied: plan.pricingRuleApplied,
+              valuesCalculatedAt: plan.calculatedAt,
+              communicationVersion: plan.communicationVersion,
+            })
+          );
+        } catch (snapshotErr) {
+          console.error("[intake] MHFA-02 snapshot write-back failed (new fields likely not added yet -- see Decision 10):", snapshotErr);
+        }
+      }
+
       await logWorkflowExecution({
         correlationId,
         automationCode,
@@ -382,23 +425,64 @@ export const handler: Handler = async (event: HandlerEvent) => {
         notionPageUrl: page.url,
         generalPayload,
       });
-      if (seatConfirmationInput && process.env.MHFA_COMM_001_ENABLED === "true") {
-        try {
-          const confirmation = await sendSeatRequestReceivedEmail(seatConfirmationInput);
+
+      if (commEnabled && planResult) {
+        if (planResult.ok) {
+          try {
+            const confirmation = await sendSeatRequestReceivedEmail(seatConfirmationInput!, planResult.plan);
+            await logWorkflowExecution({
+              correlationId,
+              automationCode: "MHFA-COMM-001",
+              status: confirmation.sent ? "completed" : "completed_with_warning",
+              trigger: formName,
+              outputSnapshot: confirmation,
+              errorSummary: confirmation.sent ? undefined : confirmation.detail,
+            });
+            // Per Tiána (Decision 10): "If any required value cannot be
+            // saved or validated, stop the send and create a high-priority
+            // exception." MHFA-05 is the real, live equivalent of the
+            // TRAIN-18 queue she referenced -- see Decision 8.
+            if (!confirmation.sent) {
+              await recordException({
+                correlationId,
+                workflowCode: "WF-REG",
+                exceptionType: "Email Failure",
+                severity: "High",
+                errorDetail: confirmation.detail,
+                registrationPageId: page.id,
+                sessionPageId: planResult.plan.session.pageId,
+              });
+            }
+          } catch (confirmationErr) {
+            // Best-effort, same as sendRegistrationAlert -- never fail the
+            // real registration response over the confirmation email.
+            console.error("[intake] MHFA-COMM-001 send failed unexpectedly:", confirmationErr);
+          }
+        } else {
+          // Session lookup itself failed -- same "stop and create a
+          // high-priority exception" rule applies.
           await logWorkflowExecution({
             correlationId,
             automationCode: "MHFA-COMM-001",
-            status: confirmation.sent ? "completed" : "completed_with_warning",
+            status: "completed_with_warning",
             trigger: formName,
-            outputSnapshot: confirmation,
-            errorSummary: confirmation.sent ? undefined : confirmation.detail,
+            errorSummary: planResult.detail,
           });
-        } catch (confirmationErr) {
-          // Best-effort, same as sendRegistrationAlert -- never fail the
-          // real registration response over the confirmation email.
-          console.error("[intake] MHFA-COMM-001 send failed unexpectedly:", confirmationErr);
+          try {
+            await recordException({
+              correlationId,
+              workflowCode: "WF-REG",
+              exceptionType: "Email Failure",
+              severity: "High",
+              errorDetail: planResult.detail,
+              registrationPageId: page.id,
+            });
+          } catch (exceptionErr) {
+            console.error("[intake] failed to record MHFA-05 exception for MHFA-COMM-001 plan failure:", exceptionErr);
+          }
         }
       }
+
       return json(200, {
         status: "notion_write_succeeded",
         automationCode,

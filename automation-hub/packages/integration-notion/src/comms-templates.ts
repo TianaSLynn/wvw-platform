@@ -22,23 +22,27 @@ export interface CommsTemplate {
 
 export class TemplateNotFoundError extends Error {
   constructor(communicationCode: string) {
-    super(`No Active template found in COMMS-02 with Communication Code "${communicationCode}".`);
+    super(`No template found in COMMS-02 with Communication Code "${communicationCode}" and Test Status "Active".`);
     this.name = "TemplateNotFoundError";
   }
 }
 
+const READY_TO_SEND_STATUS = "Active";
+
 /**
  * Looks up by Communication Code (e.g. "MHFA-COMM-001"), the same key
- * Zapier was designed to search by per COMMS-07's documented flow. Requires
- * Active checkbox = true; does NOT require Test Status = Passed, since
- * every real template in COMMS-02 is currently "Not Tested" -- that's
- * surfaced separately (see docs/DECISION_REGISTER.md Decision 9) rather
- * than silently blocking every send.
+ * Zapier was designed to search by per COMMS-07's documented flow. Gates on
+ * Test Status = "Active" -- per Tiána's 2026-08-12 governance decision
+ * (Decision 10), Test Status was repurposed from a 5-value testing-only
+ * field into her full 7-stage activation lifecycle (Draft -> Copy Approved
+ * -> Test Ready -> Test Sent -> Test Passed -> Approved for Activation ->
+ * Active), and only the final stage may be referenced by automations. The
+ * separate "Active" checkbox is no longer the gate.
  */
 export async function getActiveTemplate(communicationCode: string): Promise<CommsTemplate> {
   const result = await queryDatabaseLegacy(COMMS_02_DATABASE_ID, richTextEqualsFilter("Communication Code", communicationCode));
 
-  const active = result.results.find((page) => (page.properties as Record<string, any>).Active?.checkbox === true);
+  const active = result.results.find((page) => (page.properties as Record<string, any>)["Test Status"]?.select?.name === READY_TO_SEND_STATUS);
   if (!active) throw new TemplateNotFoundError(communicationCode);
 
   const props = active.properties as Record<string, any>;
