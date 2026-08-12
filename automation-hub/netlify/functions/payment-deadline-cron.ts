@@ -74,7 +74,7 @@ async function fetchCandidates(): Promise<Array<RegistrationDeadlineInfo & { sea
     .filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
-async function runCheck(): Promise<{ processed: number; sent: number; expired: number; skipped: number; failed: number }> {
+export async function runCheck(): Promise<{ processed: number; sent: number; expired: number; skipped: number; failed: number }> {
   let candidates;
   try {
     candidates = await fetchCandidates();
