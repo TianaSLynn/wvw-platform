@@ -45,6 +45,7 @@ import {
 import { createGroupOpportunity, type GroupOpportunityResult } from "../../packages/integration-notion/src/group-opportunity.js";
 import { logWorkflowExecution } from "../../packages/integration-postgres/src/workflow-log.js";
 import { sendRegistrationAlert } from "../../packages/integration-email/src/registration-alert.js";
+import { sendSeatRequestReceivedEmail } from "../../packages/integration-email/src/registration-confirmation.js";
 
 // MHFA-02 | Learners & Registrations, confirmed live 2026-08-03 (docs/NOTION_MAPPING.md).
 const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
@@ -76,6 +77,15 @@ interface FormHandlerResult {
    * only, same as every other path today.
    */
   notionRegistration?: (correlationId: string) => ReturnType<typeof namedRegistrationFormToHubRegistration>;
+  /**
+   * MHFA-COMM-001 (Seat Request Received) needs the learner's name/email
+   * and their raw selected-session value -- the two live individual
+   * registration forms use different field names for the same concept
+   * ("selected-session" vs "session-choice"), so each handler below
+   * supplies this in its own shape rather than intake.ts guessing which
+   * field name applies.
+   */
+  seatConfirmationInput?: { firstName: string; preferredName?: string; email: string; selectedSessionCode: string };
   /**
    * MHFA-GRP-01 only: unlike notionRegistration (one synchronous mapping +
    * one createPage call in the shared flow below), a group/private
@@ -109,6 +119,12 @@ const FORM_HANDLERS: Record<string, FormHandler> = {
         hasRestrictedData: Object.keys(restricted).length > 0,
         generalPayload: general,
         notionRegistration: (correlationId) => namedRegistrationFormToHubRegistration(parsed.data, correlationId),
+        seatConfirmationInput: {
+          firstName: parsed.data["first-name"],
+          preferredName: parsed.data["preferred-name"],
+          email: parsed.data["email"],
+          selectedSessionCode: parsed.data["selected-session"],
+        },
       },
     };
   },
@@ -131,6 +147,12 @@ const FORM_HANDLERS: Record<string, FormHandler> = {
         hasRestrictedData: false,
         generalPayload: parsed.data,
         notionRegistration: (correlationId) => formMhfa001ToHubRegistration(parsed.data, correlationId),
+        seatConfirmationInput: {
+          firstName: parsed.data["first-name"],
+          preferredName: parsed.data["preferred-name"],
+          email: parsed.data["email"],
+          selectedSessionCode: parsed.data["session-choice"],
+        },
       },
     };
   },
@@ -315,7 +337,7 @@ export const handler: Handler = async (event: HandlerEvent) => {
     return json(outcome.status, outcome.body);
   }
 
-  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload, notionRegistration, groupOpportunityWrite } = outcome.result;
+  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload, notionRegistration, groupOpportunityWrite, seatConfirmationInput } = outcome.result;
   const featureEnabled = process.env[featureFlag] === "true";
   const correlationId = generateCorrelationId(domain, automationCode);
   const payloadHash = canonicalPayloadHash(generalPayload);
@@ -360,6 +382,23 @@ export const handler: Handler = async (event: HandlerEvent) => {
         notionPageUrl: page.url,
         generalPayload,
       });
+      if (seatConfirmationInput && process.env.MHFA_COMM_001_ENABLED === "true") {
+        try {
+          const confirmation = await sendSeatRequestReceivedEmail(seatConfirmationInput);
+          await logWorkflowExecution({
+            correlationId,
+            automationCode: "MHFA-COMM-001",
+            status: confirmation.sent ? "completed" : "completed_with_warning",
+            trigger: formName,
+            outputSnapshot: confirmation,
+            errorSummary: confirmation.sent ? undefined : confirmation.detail,
+          });
+        } catch (confirmationErr) {
+          // Best-effort, same as sendRegistrationAlert -- never fail the
+          // real registration response over the confirmation email.
+          console.error("[intake] MHFA-COMM-001 send failed unexpectedly:", confirmationErr);
+        }
+      }
       return json(200, {
         status: "notion_write_succeeded",
         automationCode,

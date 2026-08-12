@@ -141,3 +141,18 @@ export function titleFilter(propertyName: string, value: string) {
 export function relationContainsFilter(propertyName: string, pageId: string) {
   return { property: propertyName, relation: { contains: pageId } };
 }
+
+/** Simple rich_text-equals filter helper (e.g. Communication Code, Session Code text fields). */
+export function richTextEqualsFilter(propertyName: string, value: string) {
+  return { property: propertyName, rich_text: { equals: value } };
+}
+
+/** Simple select-equals filter helper. */
+export function selectEqualsFilter(propertyName: string, value: string) {
+  return { property: propertyName, select: { equals: value } };
+}
+
+/** Compound AND filter helper. */
+export function andFilter(...filters: Array<Record<string, unknown>>) {
+  return { and: filters };
+}
