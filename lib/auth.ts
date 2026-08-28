@@ -32,7 +32,9 @@ function secretsMatch(candidate: string, expected: string): boolean {
  * accidentally copied into that environment.
  */
 async function getPreviewQaUser() {
-  if (process.env.CONTEXT !== "deploy-preview") return null;
+  const deployPrimeUrl = process.env.DEPLOY_PRIME_URL ?? "";
+  if (process.env.WVW_QA_PREVIEW_AUTH_ENABLED !== "true"
+    || !deployPrimeUrl.includes("deploy-preview-")) return null;
 
   const expectedToken = process.env.WVW_QA_TEST_TOKEN;
   const qaEmail = process.env.WVW_QA_USER_EMAIL;
