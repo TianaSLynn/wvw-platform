@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import type { NextFetchEvent, NextRequest } from "next/server";
 
 // Routes that are publicly accessible without authentication
 const isPublicRoute = createRouteMatcher([
@@ -27,7 +28,7 @@ const isPublicRoute = createRouteMatcher([
   "/terms",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const clerkHandler = clerkMiddleware(async (auth, req) => {
   const { userId } = await auth();
   const url = req.nextUrl;
 
@@ -47,6 +48,17 @@ export default clerkMiddleware(async (auth, req) => {
 
   return NextResponse.next();
 });
+
+function isPreviewQaRequest(req: NextRequest): boolean {
+  return process.env.CONTEXT === "deploy-preview"
+    && Boolean(process.env.WVW_QA_TEST_TOKEN)
+    && req.headers.get("x-wvw-qa-token") === process.env.WVW_QA_TEST_TOKEN;
+}
+
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  if (isPreviewQaRequest(req)) return NextResponse.next();
+  return clerkHandler(req, event);
+}
 
 export const config = {
   matcher: [
