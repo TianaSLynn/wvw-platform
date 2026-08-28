@@ -116,6 +116,26 @@ export async function sendWelcomeEmail(to: string, firstName: string) {
   });
 }
 
+export async function sendAuditParticipantInvitation(opts: {
+  to: string;
+  name: string;
+  clientName: string;
+  auditName: string;
+  surveyUrl: string;
+}) {
+  return sendEmail({
+    to: opts.to,
+    subject: `Confidential organizational audit invitation — ${opts.clientName}`,
+    html: baseTemplate(
+      h1(`Hello ${opts.name},`) +
+      p(`You have been invited to participate in <strong>${opts.auditName}</strong>. Your individual answers are kept confidential and WVW releases results only after the required anonymity threshold is met.`) +
+      p("This personal link lets WVW assist with access problems and track completion without connecting your identity to your answers.") +
+      btn("Begin confidential audit", opts.surveyUrl),
+      `Confidential audit invitation from ${opts.clientName}`
+    ),
+  });
+}
+
 export async function sendFindingAlert(opts: {
   to: string;
   firstName: string;
