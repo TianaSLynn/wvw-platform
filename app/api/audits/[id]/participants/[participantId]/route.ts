@@ -34,8 +34,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const updated: AuditParticipantInvite = parsed.data.action === "resend"
       ? { ...existing, inviteCount: existing.inviteCount + 1, lastSentAt: now }
       : parsed.data.action === "support"
-        ? { ...existing, status: "NEEDS_SUPPORT", supportNotes: parsed.data.supportNotes ?? "" }
-        : { ...existing, status: existing.sentAt ? "INVITED" : existing.status, supportNotes: undefined };
+        ? {
+            ...existing,
+            status: "NEEDS_SUPPORT",
+            statusBeforeSupport: existing.status === "NEEDS_SUPPORT"
+              ? existing.statusBeforeSupport ?? "INVITED"
+              : existing.status,
+            supportNotes: parsed.data.supportNotes ?? "",
+          }
+        : { ...existing, status: existing.statusBeforeSupport ?? "INVITED", statusBeforeSupport: undefined, supportNotes: undefined };
     const next = [...list]; next[index] = updated;
     await db.audit.update({ where: { id: audit.id }, data: { customFields: { ...fields(audit.customFields), participantInvites: next } } });
     if (parsed.data.action === "resend") {
