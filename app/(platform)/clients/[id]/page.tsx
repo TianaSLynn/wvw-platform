@@ -37,6 +37,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         orderBy: { issueDate: "desc" },
         take: 20,
       },
+      onboardingWorkflows: {
+        where: { entityType: "CLIENT", type: "ONBOARDING" },
+        include: { steps: { orderBy: { sortOrder: "asc" } } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
       _count: { select: { projects: true, audits: true, contacts: true, invoices: true } },
     },
   });
