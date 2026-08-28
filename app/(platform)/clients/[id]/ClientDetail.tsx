@@ -44,6 +44,10 @@ interface Props {
       id: string; invoiceNumber: string; status: string;
       issueDate: Date; dueDate: Date; total: number; currency: string;
     }>;
+    onboardingWorkflows: Array<{
+      id: string; status: string; targetDate: Date | null; notes: string | null;
+      steps: Array<{ id: string; title: string; status: string; sortOrder: number; documentRequired: boolean; documentCollected: boolean }>;
+    }>;
     _count: { projects: number; audits: number; contacts: number; invoices: number };
   };
   totalBilled: number;
@@ -51,7 +55,7 @@ interface Props {
   currentUserId: string;
 }
 
-type Tab = "overview" | "contacts" | "projects" | "audits" | "invoices";
+type Tab = "overview" | "onboarding" | "contacts" | "projects" | "audits" | "invoices";
 
 const STATUS_BADGE: Record<string, Parameters<typeof Badge>[0]["variant"]> = {
   ACTIVE: "success", COMPLETED: "secondary", ON_HOLD: "warning",
@@ -80,6 +84,7 @@ export default function ClientDetail({ client, totalBilled, openBalance }: Props
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "overview",  label: "Overview" },
+    { id: "onboarding", label: "Client Onboarding", count: client.onboardingWorkflows[0]?.steps.length ?? 0 },
     { id: "contacts",  label: "Contacts",  count: client._count.contacts },
     { id: "projects",  label: "Projects",  count: client._count.projects },
     { id: "audits",    label: "Audits",    count: client._count.audits },
@@ -107,19 +112,19 @@ export default function ClientDetail({ client, totalBilled, openBalance }: Props
               href={`/clients/${client.id}/edit`}
               className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium border border-border hover:bg-muted transition-colors"
             >
-              <Edit size={13} /> Edit
+              <Edit size={13} /> Manage Client Account
             </Link>
           </div>
         }
       />
 
-      {/* KPI Strip */}
+      {/* Client journey status */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 stagger-children">
         {[
-          { label: "Total Billed",   value: formatCurrency(totalBilled, "USD", true), icon: DollarSign, color: "text-gold" },
-          { label: "Open Balance",   value: formatCurrency(openBalance, "USD", true),  icon: FileText,   color: openBalance > 0 ? "text-amber-500" : "text-green-500" },
-          { label: "Projects",       value: client._count.projects,                    icon: Briefcase,  color: "text-blue-500" },
-          { label: "Audits",         value: client._count.audits,                      icon: ClipboardList, color: "text-purple-500" },
+          { label: "Onboarding", value: client.onboardingWorkflows[0] ? `${client.onboardingWorkflows[0].steps.filter((step) => step.status === "COMPLETED").length}/${client.onboardingWorkflows[0].steps.length}` : "Needs setup", icon: Users, color: "text-gold" },
+          { label: "Initial Audit", value: client.audits.find((audit) => audit.name.includes("Organizational Initial Audit"))?.status ?? "Not assigned", icon: ClipboardList, color: "text-purple-500" },
+          { label: "Client Contacts", value: client._count.contacts, icon: Users, color: "text-blue-500" },
+          { label: "Open Balance", value: formatCurrency(openBalance, "USD", true), icon: FileText, color: openBalance > 0 ? "text-amber-500" : "text-green-500" },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-card rounded-xl border border-border p-4 shadow-card">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
@@ -159,12 +164,39 @@ export default function ClientDetail({ client, totalBilled, openBalance }: Props
       {/* Tab content */}
       <div className="animate-slide-in-right">
         {tab === "overview" && <OverviewTab client={client} />}
+        {tab === "onboarding" && <OnboardingTab client={client} />}
         {tab === "contacts" && <ContactsTab client={client} />}
         {tab === "projects" && <ProjectsTab client={client} />}
         {tab === "audits"   && <AuditsTab   client={client} />}
         {tab === "invoices" && <InvoicesTab  client={client} />}
       </div>
     </>
+  );
+}
+
+function OnboardingTab({ client }: { client: Props["client"] }) {
+  const workflow = client.onboardingWorkflows[0];
+  if (!workflow) {
+    return <div className="bg-card rounded-xl border border-border p-8 text-center"><h3 className="font-semibold">No client onboarding workflow</h3><p className="mt-1 text-sm text-muted-foreground">This client was created before automatic onboarding was connected. Start or repair onboarding before launching the audit.</p></div>;
+  }
+
+  const completed = workflow.steps.filter((step) => step.status === "COMPLETED").length;
+  const percent = workflow.steps.length ? Math.round((completed / workflow.steps.length) * 100) : 0;
+  return (
+    <div className="space-y-4">
+      <div className="bg-card rounded-xl border border-border p-5 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Onboarding progress</h2><p className="text-xs text-muted-foreground">{completed} of {workflow.steps.length} steps complete</p></div><span className="text-2xl font-bold text-gold">{percent}%</span></div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gold" style={{ width: `${percent}%` }} /></div>
+      </div>
+      <div className="bg-card rounded-xl border border-border divide-y divide-border shadow-card">
+        {workflow.steps.map((step) => (
+          <div key={step.id} className="flex items-start gap-3 p-4">
+            <div className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${step.status === "COMPLETED" ? "bg-green-500/15 text-green-600" : step.status === "BLOCKED" ? "bg-muted text-muted-foreground" : "bg-gold/15 text-gold"}`}>{step.sortOrder}</div>
+            <div className="min-w-0 flex-1"><p className="text-sm font-medium">{step.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{step.status.replaceAll("_", " ")}{step.documentRequired ? ` · ${step.documentCollected ? "Document received" : "Document needed"}` : ""}</p></div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -180,10 +212,8 @@ function OverviewTab({ client }: { client: Props["client"] }) {
             { label: "Legal Name",     value: client.legalName },
             { label: "Industry",       value: client.industry },
             { label: "Website",        value: client.website, href: client.website ?? undefined },
-            { label: "Billing Email",  value: client.billingEmail },
-            { label: "Payment Terms",  value: client.paymentTerms ? `Net ${client.paymentTerms}` : null },
             { label: "Health Score",   value: client.healthScore != null ? `${client.healthScore}/100` : null },
-            { label: "Client Since",   value: client.onboardedAt ? formatDate(client.onboardedAt, "MMMM yyyy") : null },
+            { label: "Onboarding", value: client.onboardedAt ? `Completed ${formatDate(client.onboardedAt, "MMMM yyyy")}` : "In progress" },
           ].map(({ label, value, href }) => value ? (
             <div key={label}>
               <dt className="text-xs text-muted-foreground">{label}</dt>
