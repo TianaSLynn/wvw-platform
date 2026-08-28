@@ -32,17 +32,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const existing = list[index]!;
     const now = new Date().toISOString();
     const updated: AuditParticipantInvite = parsed.data.action === "resend"
-      ? { ...existing, inviteCount: existing.inviteCount + 1, lastSentAt: now }
+      ? { ...existing, status: existing.status === "SUBMITTED" ? "SUBMITTED" : "INVITED", inviteCount: existing.inviteCount + 1, sentAt: existing.sentAt || now, lastSentAt: now }
       : parsed.data.action === "support"
         ? {
             ...existing,
             status: "NEEDS_SUPPORT",
             statusBeforeSupport: existing.status === "NEEDS_SUPPORT"
-              ? existing.statusBeforeSupport ?? "INVITED"
+              ? existing.statusBeforeSupport ?? "READY"
               : existing.status,
             supportNotes: parsed.data.supportNotes ?? "",
           }
-        : { ...existing, status: existing.statusBeforeSupport ?? "INVITED", statusBeforeSupport: undefined, supportNotes: undefined };
+        : { ...existing, status: existing.statusBeforeSupport ?? "READY", statusBeforeSupport: undefined, supportNotes: undefined };
     const next = [...list]; next[index] = updated;
     await db.audit.update({ where: { id: audit.id }, data: { customFields: { ...fields(audit.customFields), participantInvites: next } } });
     if (parsed.data.action === "resend") {
