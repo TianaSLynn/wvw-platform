@@ -3,6 +3,7 @@ import { unauthorized, tooManyRequests } from "@/lib/api-response";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
+import { getAnonymityThreshold, getReleaseStatus } from "@/lib/audit-privacy";
 
 const client = new Anthropic();
 
@@ -56,7 +57,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "get_audit_detail",
-    description: "Get full audit details including all sections, checklist items, findings, evidence, and survey results.",
+    description: "Get audit details, findings, evidence, and threshold-released anonymous results. Never returns raw participant answers or identities.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -287,6 +288,17 @@ async function executeTool(name: string, input: Record<string, unknown>, orgId: 
         },
         include: {
           client: { select: { name: true } },
+          auditResult: {
+            include: {
+              domainResults: { orderBy: { score: "asc" } },
+              patternFlags: { orderBy: { avgScore: "asc" } },
+            },
+          },
+          recommendations: {
+            include: { pathway: { select: { name: true, pathwayNumber: true } } },
+            orderBy: { priority: "asc" },
+            take: 20,
+          },
           sections: {
             include: {
               checklistItems: {
@@ -300,12 +312,20 @@ async function executeTool(name: string, input: Record<string, unknown>, orgId: 
             orderBy: [{ severity: "asc" }],
             take: 50,
           },
-          _count: { select: { evidence: true, findings: true } },
+          _count: { select: { evidence: true, findings: true, surveyResponses: true } },
         },
       });
       if (!audit) return { error: "Audit not found" };
       const allItems = audit.sections.flatMap(s => s.checklistItems);
       const completed = allItems.filter(i => i.isCompleted).length;
+      const customFields = audit.customFields && typeof audit.customFields === "object"
+        ? audit.customFields as Record<string, unknown>
+        : null;
+      const anonymity = getReleaseStatus(
+        audit._count.surveyResponses,
+        getAnonymityThreshold(customFields),
+      );
+      const releasedResult = anonymity.released ? audit.auditResult : null;
       return {
         id: audit.id, name: audit.name, type: audit.type, status: audit.status,
         client: audit.client?.name, evidenceCount: audit._count.evidence,
@@ -317,6 +337,24 @@ async function executeTool(name: string, input: Record<string, unknown>, orgId: 
           completed: s.checklistItems.filter(i => i.isCompleted).length,
         })),
         findings: audit.findings,
+        anonymity,
+        anonymousResults: releasedResult ? {
+          overallScore: releasedResult.overallScore,
+          riskBand: releasedResult.riskBand,
+          responseCount: releasedResult.responseCount,
+          flaggedRiskTags: releasedResult.flaggedRiskTags,
+          domains: releasedResult.domainResults,
+          patternFlags: releasedResult.patternFlags,
+          recommendations: audit.recommendations.map((recommendation) => ({
+            title: recommendation.title,
+            body: recommendation.body,
+            triggerType: recommendation.triggerType,
+            pathway: recommendation.pathway,
+          })),
+        } : null,
+        privacyNotice: anonymity.released
+          ? "Only anonymous aggregate results are included. AI output requires WVW consultant review."
+          : `Results are suppressed until ${anonymity.threshold} anonymous responses are received.`,
       };
     }
 
