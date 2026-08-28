@@ -29,8 +29,16 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const clerkHandler = clerkMiddleware(async (auth, req) => {
-  const { userId } = await auth();
   const url = req.nextUrl;
+
+  // Token-gated participant routes do not need a Clerk session. Checking them
+  // before auth also keeps the secure survey journey available when the
+  // administrative Clerk UI is not configured in an isolated preview.
+  if (isPublicRoute(req) && url.pathname !== "/") {
+    return NextResponse.next();
+  }
+
+  const { userId } = await auth();
 
   if (!isPublicRoute(req) && !userId) {
     // Manual redirect instead of auth.protect() to avoid Clerk's
