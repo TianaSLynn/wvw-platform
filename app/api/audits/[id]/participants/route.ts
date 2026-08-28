@@ -16,6 +16,7 @@ export type AuditParticipantInvite = {
   sentAt: string;
   lastSentAt: string;
   supportNotes?: string;
+  statusBeforeSupport?: "INVITED" | "OPENED" | "SUBMITTED";
 };
 
 const addSchema = z.object({
