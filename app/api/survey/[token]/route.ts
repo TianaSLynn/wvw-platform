@@ -7,6 +7,7 @@ import { ok, notFound, serverError, badRequest } from "@/lib/api-response";
 import { verifySurveyToken } from "@/lib/survey-token";
 import { z } from "zod";
 import { isAnonymousAudit } from "@/lib/audit-privacy";
+import type { Prisma } from "@prisma/client";
 
 const submitSchema = z.object({
   respondentName:  z.string().min(1).optional(),
@@ -96,6 +97,20 @@ export async function POST(
         notes:           parsed.data.notes,
       },
     });
+
+    const participantId = new URL(req.url).searchParams.get("participant");
+    if (participantId) {
+      const existingFields = audit.customFields && typeof audit.customFields === "object" && !Array.isArray(audit.customFields)
+        ? audit.customFields as Record<string, unknown> : {};
+      const invites = Array.isArray(existingFields.participantInvites)
+        ? existingFields.participantInvites as Array<Record<string, unknown>> : [];
+      const index = invites.findIndex((item) => item.id === participantId);
+      if (index >= 0) {
+        const next = [...invites];
+        next[index] = { ...next[index], status: "SUBMITTED", submittedAt: new Date().toISOString() };
+        await db.audit.update({ where: { id: audit.id }, data: { customFields: { ...existingFields, participantInvites: next } as Prisma.InputJsonValue } });
+      }
+    }
 
     return ok({ success: true, message: "Thank you — your responses have been recorded." });
   } catch (e) { return serverError(e); }
