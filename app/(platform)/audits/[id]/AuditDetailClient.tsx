@@ -1102,6 +1102,8 @@ function SurveyDistributionTab({ auditId, auditName, initialCollectionStatus, on
   const [participantGroup, setParticipantGroup] = useState("Workforce");
   const [participantBusy, setParticipantBusy] = useState(false);
   const [participantError, setParticipantError] = useState<string | null>(null);
+  const [showBulkParticipants, setShowBulkParticipants] = useState(false);
+  const [bulkParticipants, setBulkParticipants] = useState("");
   const [collectionStatus, setCollectionStatus] = useState(initialCollectionStatus);
   const [collectionBusy, setCollectionBusy] = useState(false);
 
@@ -1153,6 +1155,22 @@ function SurveyDistributionTab({ auditId, auditName, initialCollectionStatus, on
       if (!res.ok) throw new Error(body.error ?? "Participant could not be updated.");
       await loadParticipants();
     } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participant could not be updated."); }
+    finally { setParticipantBusy(false); }
+  };
+
+  const importParticipants = async () => {
+    const parsed = bulkParticipants.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [name, email, group] = line.split(",").map((value) => value?.trim());
+      return { name: name ?? "", email: email ?? "", group: group || "Workforce" };
+    });
+    if (!parsed.length) return;
+    setParticipantBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/participants/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participants: parsed }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Participants could not be imported.");
+      setBulkParticipants(""); setShowBulkParticipants(false); await loadParticipants();
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participants could not be imported."); }
     finally { setParticipantBusy(false); }
   };
 
@@ -1270,6 +1288,15 @@ function SurveyDistributionTab({ auditId, auditName, initialCollectionStatus, on
           <div className="flex items-center gap-2"><Users size={15} className="text-gold" /><h3 className="text-sm font-semibold">Participant Management</h3></div>
           <p className="mt-1 text-[11px] text-muted-foreground">Manage access and technical support without connecting a person to their confidential answers.</p>
         </div>
+        <div className="grid grid-cols-2 gap-3 p-4 border-b border-border md:grid-cols-5">
+          {[
+            ["Assigned", participants.length],
+            ["Ready", participants.filter((item) => item.status === "READY").length],
+            ["Invited/Open", participants.filter((item) => ["INVITED", "OPENED"].includes(item.status)).length],
+            ["Submitted", participants.filter((item) => item.status === "SUBMITTED").length],
+            ["Needs support", participants.filter((item) => item.status === "NEEDS_SUPPORT").length],
+          ].map(([label, value]) => <div key={String(label)} className="rounded-xl bg-muted/50 p-3 text-center"><p className="text-lg font-semibold">{value}</p><p className="text-[10px] text-muted-foreground">{label}</p></div>)}
+        </div>
         <div className="p-4 border-b border-border grid gap-3 md:grid-cols-[1fr_1.4fr_1fr_auto]">
           <input value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Participant name" className="input-field text-xs" />
           <input value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="Email address" type="email" className="input-field text-xs" />
@@ -1277,6 +1304,10 @@ function SurveyDistributionTab({ auditId, auditName, initialCollectionStatus, on
             <option>Workforce</option><option>Leadership</option><option>Governance</option><option>Service Recipient</option><option>Other</option>
           </select>
           <button type="button" onClick={addParticipant} disabled={participantBusy || !participantName || !participantEmail} className="btn-primary text-xs flex items-center gap-1.5"><Plus size={13} /> Add &amp; send</button>
+        </div>
+        <div className="px-4 py-3 border-b border-border">
+          <button type="button" className="btn-ghost text-xs" onClick={() => setShowBulkParticipants((value) => !value)}><Users size={12} className="inline mr-1" />{showBulkParticipants ? "Hide bulk setup" : "Add multiple participants"}</button>
+          {showBulkParticipants && <div className="mt-3 space-y-2"><textarea value={bulkParticipants} onChange={(event) => setBulkParticipants(event.target.value)} rows={5} className="input-field w-full text-xs font-mono" placeholder={"Name, email, group\nJordan Lee, jordan@example.org, Workforce\nMorgan Hill, morgan@example.org, Leadership"} /><div className="flex items-center justify-between gap-3"><p className="text-[11px] text-muted-foreground">One person per line. Bulk-added participants are staged as Ready so you can review before sending.</p><button type="button" onClick={importParticipants} disabled={participantBusy || !bulkParticipants.trim()} className="btn-primary text-xs">Import list</button></div></div>}
         </div>
         {participantError && <p className="px-4 pt-3 text-xs text-red-500">{participantError}</p>}
         {participants.length === 0 ? (
