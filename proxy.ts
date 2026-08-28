@@ -65,6 +65,11 @@ function isPreviewQaRequest(req: NextRequest): boolean {
 }
 
 export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  // Bypass Clerk's middleware wrapper entirely for public token-gated routes.
+  // The route handlers verify their signed survey/invitation tokens directly.
+  if (isPublicRoute(req) && req.nextUrl.pathname !== "/") {
+    return NextResponse.next();
+  }
   if (isPreviewQaRequest(req)) return NextResponse.next();
   return clerkHandler(req, event);
 }
