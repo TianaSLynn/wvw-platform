@@ -51,7 +51,12 @@ export async function POST(req: Request) {
     // Build sections from template if provided
     let sectionsData: {
       title: string; description?: string; sortOrder: number;
-      checklistItems: { create: { question: string; guidance?: string; riskWeight: number; isRequired: boolean; evidenceRequired: boolean; sortOrder: number }[] };
+      checklistItems: { create: {
+        question: string; guidance?: string; riskWeight: number; isRequired: boolean;
+        evidenceRequired: boolean; sortOrder: number; qId?: string;
+        questionType: string; reverseScored: boolean; riskTag?: string;
+        pathwayTriggers: string[]; scenarioOptions?: object;
+      }[] };
     }[] = [];
 
     if (parsed.data.templateId) {
@@ -76,6 +81,14 @@ export async function POST(req: Request) {
               isRequired: item.isRequired,
               evidenceRequired: item.evidenceRequired,
               sortOrder: item.sortOrder,
+              qId: item.qId ?? undefined,
+              questionType: item.questionType,
+              reverseScored: item.reverseScored,
+              riskTag: item.riskTag ?? undefined,
+              pathwayTriggers: item.pathwayTriggers,
+              scenarioOptions: item.scenarioOptions
+                ? (item.scenarioOptions as object)
+                : undefined,
             })),
           },
         }));

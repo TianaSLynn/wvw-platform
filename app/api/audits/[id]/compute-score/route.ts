@@ -78,6 +78,10 @@ export async function POST(
     responses: r.responses as Record<string, string>,
   }));
 
+  if (responses.length === 0) {
+    return badRequest("Insufficient data: no participant responses have been submitted.");
+  }
+
   // Compute scores
   const result = computeAuditScores(items, responses);
 
@@ -229,8 +233,14 @@ export async function GET(
   const { id: auditId } = await params;
 
   try {
+    const audit = await db.audit.findFirst({
+      where: { id: auditId, orgId: user.orgId },
+      select: { id: true },
+    });
+    if (!audit) return badRequest("Audit not found");
+
     const auditResult = await db.auditResult.findUnique({
-      where: { auditId },
+      where: { auditId: audit.id },
       include: {
         domainResults: { orderBy: { score: "asc" } },
         patternFlags: { orderBy: { avgScore: "asc" } },
@@ -240,7 +250,7 @@ export async function GET(
     if (!auditResult) return ok(null);
 
     const recommendations = await db.generatedRecommendation.findMany({
-      where: { auditId },
+      where: { auditId: audit.id },
       include: { pathway: { select: { id: true, slug: true, name: true, pathwayNumber: true } } },
       orderBy: { priority: "asc" },
     });

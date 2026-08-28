@@ -4,7 +4,7 @@
  * Auditors can share this link with client employees to collect Likert responses.
  */
 import { db } from "@/lib/db";
-import { ok, unauthorized, notFound, serverError } from "@/lib/api-response";
+import { ok, unauthorized, notFound, serverError, badRequest } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth";
 import { generateSurveyToken } from "@/lib/survey-token";
 
@@ -19,9 +19,30 @@ export async function POST(
 
     const audit = await db.audit.findFirst({
       where: { id: auditId, orgId: user.orgId },
-      select: { id: true, name: true, client: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        isLocked: true,
+        customFields: true,
+        client: { select: { name: true } },
+      },
     });
     if (!audit) return notFound("Audit");
+    if (audit.isLocked) return badRequest("This audit is locked and cannot collect responses.");
+
+    await db.audit.update({
+      where: { id: audit.id },
+      data: {
+        isPublicTokenActive: true,
+        customFields: {
+          ...(audit.customFields && typeof audit.customFields === "object"
+            ? audit.customFields
+            : {}),
+          collectionStatus: "OPEN",
+          collectionOpenedAt: new Date().toISOString(),
+        },
+      },
+    });
 
     const token = generateSurveyToken(auditId);
     const origin = process.env.NEXT_PUBLIC_APP_URL

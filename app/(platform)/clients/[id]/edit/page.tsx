@@ -20,10 +20,15 @@ export default async function EditClientPage({ params }: { params: Promise<{ id:
       id: true, name: true, legalName: true, industry: true, size: true,
       website: true, description: true, billingEmail: true, taxId: true,
       paymentTerms: true, defaultRate: true, isActive: true,
+      contacts: {
+        where: { isPrimary: true, deletedAt: null },
+        take: 1,
+        select: { firstName: true, lastName: true, email: true, phone: true, title: true, department: true },
+      },
     },
   });
 
   if (!client) notFound();
 
-  return <EditClientForm client={client} />;
+  return <EditClientForm client={{ ...client, primaryContact: client.contacts[0] ?? null }} />;
 }

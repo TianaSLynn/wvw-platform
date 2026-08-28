@@ -26,7 +26,7 @@ export async function GET(
     if (!auditId) return notFound("Survey");
 
     const audit = await db.audit.findFirst({
-      where: { id: auditId },
+      where: { id: auditId, isPublicTokenActive: true, isLocked: false },
       select: {
         id: true, name: true, type: true,
         client: { select: { name: true } },
@@ -65,44 +65,31 @@ export async function POST(
     const auditId = verifySurveyToken(token);
     if (!auditId) return notFound("Survey");
 
-    const audit = await db.audit.findFirst({ where: { id: auditId }, select: { id: true } });
+    const audit = await db.audit.findFirst({
+      where: { id: auditId, isPublicTokenActive: true, isLocked: false },
+      select: { id: true },
+    });
     if (!audit) return notFound("Survey");
 
     const body = await req.json();
     const parsed = submitSchema.safeParse(body);
     if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
 
-    // Check if this token was already used (allows re-submission with same token)
-    const existing = await db.surveyResponse.findUnique({ where: { token } });
-
-    if (existing) {
-      // Update existing response (allows editing before deadline)
-      await db.surveyResponse.update({
-        where: { token },
-        data: {
-          respondentName:  parsed.data.respondentName,
-          respondentEmail: parsed.data.respondentEmail,
-          respondentRole:  parsed.data.respondentRole,
-          respondentDept:  parsed.data.respondentDept,
-          responses:       parsed.data.responses,
-          notes:           parsed.data.notes,
-          submittedAt:     new Date(),
-        },
-      });
-    } else {
-      await db.surveyResponse.create({
-        data: {
-          auditId,
-          token,
-          respondentName:  parsed.data.respondentName,
-          respondentEmail: parsed.data.respondentEmail,
-          respondentRole:  parsed.data.respondentRole,
-          respondentDept:  parsed.data.respondentDept,
-          responses:       parsed.data.responses,
-          notes:           parsed.data.notes,
-        },
-      });
-    }
+    // A survey URL is an audit invitation, not a one-person response record.
+    // Every submission must create its own anonymous response; otherwise a
+    // shared employee link overwrites the previous participant's answers.
+    await db.surveyResponse.create({
+      data: {
+        auditId,
+        token: null,
+        respondentName:  parsed.data.respondentName,
+        respondentEmail: parsed.data.respondentEmail,
+        respondentRole:  parsed.data.respondentRole,
+        respondentDept:  parsed.data.respondentDept,
+        responses:       parsed.data.responses,
+        notes:           parsed.data.notes,
+      },
+    });
 
     return ok({ success: true, message: "Thank you — your responses have been recorded." });
   } catch (e) { return serverError(e); }

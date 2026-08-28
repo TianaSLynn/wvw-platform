@@ -144,6 +144,8 @@ export async function POST(req: Request) {
             knownConcerns: onboardingContext.knownConcerns ?? "",
             participantGroups: onboardingContext.participantGroups,
             accessibilityNeeds: onboardingContext.accessibilityNeeds ?? "",
+            minimumAnonymousResponses: 5,
+            collectionStatus: "LOCKED",
           },
           members: { create: { userId: user.id, role: "lead" } },
           sections: template ? {
@@ -159,6 +161,14 @@ export async function POST(req: Request) {
                   isRequired: item.isRequired,
                   evidenceRequired: item.evidenceRequired,
                   sortOrder: item.sortOrder,
+                  qId: item.qId,
+                  questionType: item.questionType,
+                  reverseScored: item.reverseScored,
+                  riskTag: item.riskTag,
+                  pathwayTriggers: item.pathwayTriggers,
+                  scenarioOptions: item.scenarioOptions === null
+                    ? undefined
+                    : item.scenarioOptions,
                 })),
               },
             })),
