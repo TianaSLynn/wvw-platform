@@ -11,12 +11,12 @@ export type AuditParticipantInvite = {
   name: string;
   email: string;
   group: string;
-  status: "INVITED" | "OPENED" | "SUBMITTED" | "NEEDS_SUPPORT";
+  status: "READY" | "INVITED" | "OPENED" | "SUBMITTED" | "NEEDS_SUPPORT";
   inviteCount: number;
   sentAt: string;
   lastSentAt: string;
   supportNotes?: string;
-  statusBeforeSupport?: "INVITED" | "OPENED" | "SUBMITTED";
+  statusBeforeSupport?: "READY" | "INVITED" | "OPENED" | "SUBMITTED";
 };
 
 const addSchema = z.object({
@@ -73,7 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       name: parsed.data.name,
       email: parsed.data.email.toLowerCase(),
       group: parsed.data.group,
-      status: "INVITED",
+      status: parsed.data.sendNow ? "INVITED" : "READY",
       inviteCount: parsed.data.sendNow ? 1 : 0,
       sentAt: parsed.data.sendNow ? now : "",
       lastSentAt: parsed.data.sendNow ? now : "",
