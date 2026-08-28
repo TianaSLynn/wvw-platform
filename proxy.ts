@@ -51,7 +51,7 @@ const clerkHandler = clerkMiddleware(async (auth, req) => {
 
 function isPreviewQaRequest(req: NextRequest): boolean {
   return process.env.WVW_QA_PREVIEW_AUTH_ENABLED === "true"
-    && (process.env.DEPLOY_PRIME_URL ?? "").includes("deploy-preview-")
+    && req.nextUrl.hostname.startsWith("deploy-preview-")
     && Boolean(process.env.WVW_QA_TEST_TOKEN)
     && req.headers.get("x-wvw-qa-token") === process.env.WVW_QA_TEST_TOKEN;
 }
