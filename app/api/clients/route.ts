@@ -145,6 +145,7 @@ export async function POST(req: Request) {
             participantGroups: onboardingContext.participantGroups,
             accessibilityNeeds: onboardingContext.accessibilityNeeds ?? "",
             minimumAnonymousResponses: 5,
+            anonymousCollection: true,
             collectionStatus: "LOCKED",
           },
           members: { create: { userId: user.id, role: "lead" } },

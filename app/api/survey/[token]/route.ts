@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { ok, notFound, serverError, badRequest } from "@/lib/api-response";
 import { verifySurveyToken } from "@/lib/survey-token";
 import { z } from "zod";
+import { isAnonymousAudit } from "@/lib/audit-privacy";
 
 const submitSchema = z.object({
   respondentName:  z.string().min(1).optional(),
@@ -67,7 +68,7 @@ export async function POST(
 
     const audit = await db.audit.findFirst({
       where: { id: auditId, isPublicTokenActive: true, isLocked: false },
-      select: { id: true },
+      select: { id: true, customFields: true },
     });
     if (!audit) return notFound("Survey");
 
@@ -78,12 +79,17 @@ export async function POST(
     // A survey URL is an audit invitation, not a one-person response record.
     // Every submission must create its own anonymous response; otherwise a
     // shared employee link overwrites the previous participant's answers.
+    const customFields = audit.customFields && typeof audit.customFields === "object"
+      ? audit.customFields as Record<string, unknown>
+      : null;
+    const anonymous = isAnonymousAudit(customFields);
+
     await db.surveyResponse.create({
       data: {
         auditId,
         token: null,
-        respondentName:  parsed.data.respondentName,
-        respondentEmail: parsed.data.respondentEmail,
+        respondentName:  anonymous ? null : parsed.data.respondentName,
+        respondentEmail: anonymous ? null : parsed.data.respondentEmail,
         respondentRole:  parsed.data.respondentRole,
         respondentDept:  parsed.data.respondentDept,
         responses:       parsed.data.responses,

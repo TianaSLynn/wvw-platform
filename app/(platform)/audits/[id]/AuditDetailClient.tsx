@@ -1394,6 +1394,12 @@ function ResultsTab({ auditId }: { auditId: string }) {
             >
               <TrendingUp size={11} /> {computing ? "Recomputing…" : "Recompute Scores"}
             </button>
+            <a
+              href={`/api/audits/${auditId}/research-export`}
+              className="btn-ghost text-xs inline-flex items-center gap-1"
+            >
+              <Download size={11} /> Download Anonymous Research CSV
+            </a>
           </div>
         </div>
       </div>

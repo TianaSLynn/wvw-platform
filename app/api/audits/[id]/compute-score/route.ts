@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { computeAuditScores, getRecommendedPathways } from "@/lib/scoring";
 import type { ChecklistItemMeta } from "@/lib/scoring";
+import { getAnonymityThreshold } from "@/lib/audit-privacy";
 
 export async function POST(
   _req: Request,
@@ -18,6 +19,7 @@ export async function POST(
     where: { id: auditId, orgId: user.orgId },
     select: {
       id: true,
+      customFields: true,
       sections: {
         select: {
           id: true,
@@ -78,8 +80,15 @@ export async function POST(
     responses: r.responses as Record<string, string>,
   }));
 
-  if (responses.length === 0) {
-    return badRequest("Insufficient data: no participant responses have been submitted.");
+  const threshold = getAnonymityThreshold(
+    audit.customFields && typeof audit.customFields === "object"
+      ? audit.customFields as Record<string, unknown>
+      : null
+  );
+  if (responses.length < threshold) {
+    return badRequest(
+      `Insufficient anonymous data: ${responses.length} of ${threshold} required responses have been submitted.`
+    );
   }
 
   // Compute scores
@@ -217,6 +226,7 @@ export async function POST(
     overallScore: result.overallScore,
     riskBand: result.riskBand,
     responseCount: result.responseCount,
+    anonymityThreshold: threshold,
     domainCount: result.domainScores.length,
     patternFlagCount: result.patternFlags.length,
   });
