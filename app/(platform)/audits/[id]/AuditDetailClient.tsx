@@ -60,6 +60,8 @@ type Audit = {
   frameworks: Array<{ framework: { name: string; type: string } }>;
   planningStartDate: Date | null; fieldworkStartDate: Date | null;
   fieldworkEndDate: Date | null; reportDueDate: Date | null;
+  isLocked: boolean; isPublicTokenActive: boolean;
+  customFields?: Record<string, unknown>;
 };
 
 interface Props {
@@ -315,7 +317,7 @@ export default function AuditDetailClient({
         {tab === "evidence"  && <EvidenceTab evidence={audit.evidence} auditId={audit.id} />}
         {tab === "tracker"   && <EvidenceTrackerTab auditId={audit.id} />}
         {tab === "team"      && <TeamTab members={audit.members} />}
-        {tab === "survey"    && <SurveyDistributionTab auditId={audit.id} auditName={audit.name} onScored={() => { showToast("Scores computed — switching to Results tab."); setTab("results"); }} />}
+        {tab === "survey"    && <SurveyDistributionTab auditId={audit.id} auditName={audit.name} initialCollectionStatus={audit.isLocked ? "CLOSED" : audit.isPublicTokenActive ? "OPEN" : "PAUSED"} onScored={() => { showToast("Scores computed — switching to Results tab."); setTab("results"); }} />}
         {tab === "results"   && <ResultsTab auditId={audit.id} />}
       </div>
     </div>
@@ -1083,7 +1085,7 @@ function TeamTab({ members }: { members: Audit["members"] }) {
 }
 
 // ─── Survey Distribution Tab ──────────────────────────────────────────────────
-function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: string; auditName: string; onScored?: () => void }) {
+function SurveyDistributionTab({ auditId, auditName, initialCollectionStatus, onScored }: { auditId: string; auditName: string; initialCollectionStatus: "OPEN" | "PAUSED" | "CLOSED"; onScored?: () => void }) {
   const [surveyUrl, setSurveyUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1100,6 +1102,20 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
   const [participantGroup, setParticipantGroup] = useState("Workforce");
   const [participantBusy, setParticipantBusy] = useState(false);
   const [participantError, setParticipantError] = useState<string | null>(null);
+  const [collectionStatus, setCollectionStatus] = useState(initialCollectionStatus);
+  const [collectionBusy, setCollectionBusy] = useState(false);
+
+  const changeCollection = async (action: "open" | "pause" | "close") => {
+    setCollectionBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/collection`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Collection status could not be changed.");
+      setCollectionStatus(body.data.collectionStatus);
+      if (action !== "open") setSurveyUrl(null);
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Collection status could not be changed."); }
+    finally { setCollectionBusy(false); }
+  };
 
   const loadParticipants = async () => {
     const res = await fetch(`/api/audits/${auditId}/participants`);
@@ -1173,6 +1189,16 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <div className="section-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div><div className="flex items-center gap-2"><Shield size={15} className="text-gold" /><h3 className="text-sm font-semibold">Audit Collection Control</h3><Badge variant={collectionStatus === "OPEN" ? "success" : collectionStatus === "CLOSED" ? "secondary" : "warning"}>{collectionStatus}</Badge></div><p className="mt-1 text-xs text-muted-foreground">Open accepts responses, Pause temporarily disables every link, and Close locks collection.</p></div>
+          <div className="flex items-center gap-2">
+            {collectionStatus !== "OPEN" && <button type="button" disabled={collectionBusy || collectionStatus === "CLOSED"} onClick={() => changeCollection("open")} className="btn-primary text-xs">Open collection</button>}
+            {collectionStatus === "OPEN" && <button type="button" disabled={collectionBusy} onClick={() => changeCollection("pause")} className="btn-ghost text-xs">Pause</button>}
+            {collectionStatus !== "CLOSED" && <button type="button" disabled={collectionBusy} onClick={() => changeCollection("close")} className="btn-ghost text-xs text-red-500">Close audit</button>}
+          </div>
+        </div>
+      </div>
       {/* Explainer */}
       <div className="section-card p-5">
         <div className="flex items-center gap-2 mb-3">
@@ -1200,11 +1226,11 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
           <button
             type="button"
             onClick={generateLink}
-            disabled={loading}
+            disabled={loading || collectionStatus !== "OPEN"}
             className="btn-primary flex items-center gap-2"
           >
             <Send size={14} />
-            {loading ? "Generating…" : "Generate Survey Link"}
+            {loading ? "Generating…" : collectionStatus === "OPEN" ? "Generate Survey Link" : "Open collection to generate link"}
           </button>
         ) : (
           <div className="space-y-3">
