@@ -32,15 +32,16 @@ function secretsMatch(candidate: string, expected: string): boolean {
  * accidentally copied into that environment.
  */
 async function getPreviewQaUser() {
-  const deployPrimeUrl = process.env.DEPLOY_PRIME_URL ?? "";
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("host") ?? "";
   if (process.env.WVW_QA_PREVIEW_AUTH_ENABLED !== "true"
-    || !deployPrimeUrl.includes("deploy-preview-")) return null;
+    || !host.startsWith("deploy-preview-")) return null;
 
   const expectedToken = process.env.WVW_QA_TEST_TOKEN;
   const qaEmail = process.env.WVW_QA_USER_EMAIL;
   if (!expectedToken || !qaEmail) return null;
 
-  const candidateToken = (await headers()).get("x-wvw-qa-token") ?? "";
+  const candidateToken = requestHeaders.get("x-wvw-qa-token") ?? "";
   if (!secretsMatch(candidateToken, expectedToken)) return null;
 
   return db.user.findFirst({
