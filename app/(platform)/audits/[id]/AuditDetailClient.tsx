@@ -1091,6 +1091,54 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
   const [loadingResults, setLoadingResults] = useState(false);
   const [avgScores, setAvgScores] = useState<Record<string, { avg: number; count: number }> | null>(null);
   const [scoreSuccess, setScoreSuccess] = useState(false);
+  const [participants, setParticipants] = useState<Array<{
+    id: string; name: string; email: string; group: string; status: string;
+    inviteCount: number; lastSentAt: string; supportNotes?: string;
+  }>>([]);
+  const [participantName, setParticipantName] = useState("");
+  const [participantEmail, setParticipantEmail] = useState("");
+  const [participantGroup, setParticipantGroup] = useState("Workforce");
+  const [participantBusy, setParticipantBusy] = useState(false);
+  const [participantError, setParticipantError] = useState<string | null>(null);
+
+  const loadParticipants = async () => {
+    const res = await fetch(`/api/audits/${auditId}/participants`);
+    if (!res.ok) return;
+    const { data } = await res.json() as { data: { participants: typeof participants } };
+    setParticipants(data.participants);
+  };
+
+  useEffect(() => { void loadParticipants(); }, [auditId]);
+
+  const addParticipant = async () => {
+    setParticipantBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/participants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: participantName, email: participantEmail, group: participantGroup, sendNow: true }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Participant could not be added.");
+      setParticipantName(""); setParticipantEmail("");
+      await loadParticipants();
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participant could not be added."); }
+    finally { setParticipantBusy(false); }
+  };
+
+  const updateParticipant = async (participantId: string, action: "resend" | "support" | "clear-support") => {
+    const supportNotes = action === "support" ? window.prompt("What technical assistance does this participant need?") ?? "" : undefined;
+    if (action === "support" && !supportNotes) return;
+    setParticipantBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/participants/${participantId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, supportNotes }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Participant could not be updated.");
+      await loadParticipants();
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participant could not be updated."); }
+    finally { setParticipantBusy(false); }
+  };
 
   const generateLink = async () => {
     setLoading(true);
@@ -1186,6 +1234,42 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
             <p className="text-[11px] text-muted-foreground">
               Share this link via email, Slack, or ask your client to forward it to their employees. Each submission is confidential.
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* Participant support registry — identities stay separate from answers */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <div className="flex items-center gap-2"><Users size={15} className="text-gold" /><h3 className="text-sm font-semibold">Participant Management</h3></div>
+          <p className="mt-1 text-[11px] text-muted-foreground">Manage access and technical support without connecting a person to their confidential answers.</p>
+        </div>
+        <div className="p-4 border-b border-border grid gap-3 md:grid-cols-[1fr_1.4fr_1fr_auto]">
+          <input value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Participant name" className="input-field text-xs" />
+          <input value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="Email address" type="email" className="input-field text-xs" />
+          <select value={participantGroup} onChange={(event) => setParticipantGroup(event.target.value)} className="input-field text-xs">
+            <option>Workforce</option><option>Leadership</option><option>Governance</option><option>Service Recipient</option><option>Other</option>
+          </select>
+          <button type="button" onClick={addParticipant} disabled={participantBusy || !participantName || !participantEmail} className="btn-primary text-xs flex items-center gap-1.5"><Plus size={13} /> Add &amp; send</button>
+        </div>
+        {participantError && <p className="px-4 pt-3 text-xs text-red-500">{participantError}</p>}
+        {participants.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">No participants have been added. You can still use the general anonymous link above.</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {participants.map((participant) => (
+              <div key={participant.id} className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2"><p className="text-sm font-medium truncate">{participant.name}</p><Badge variant={participant.status === "SUBMITTED" ? "success" : participant.status === "NEEDS_SUPPORT" ? "warning" : "secondary"}>{participant.status.replace(/_/g, " ")}</Badge></div>
+                  <p className="text-xs text-muted-foreground truncate">{participant.email} · {participant.group} · sent {participant.inviteCount} time{participant.inviteCount === 1 ? "" : "s"}</p>
+                  {participant.supportNotes && <p className="mt-1 text-xs text-amber-600">Support: {participant.supportNotes}</p>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {participant.status !== "SUBMITTED" && <button type="button" disabled={participantBusy} onClick={() => updateParticipant(participant.id, "resend")} className="btn-ghost text-xs"><RefreshCw size={12} className="inline mr-1" />Resend</button>}
+                  <button type="button" disabled={participantBusy} onClick={() => updateParticipant(participant.id, participant.status === "NEEDS_SUPPORT" ? "clear-support" : "support")} className="btn-ghost text-xs">{participant.status === "NEEDS_SUPPORT" ? "Resolve support" : "Tech support"}</button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
