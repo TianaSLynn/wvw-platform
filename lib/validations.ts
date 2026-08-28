@@ -17,6 +17,31 @@ export const clientSchema = z.object({
   onboardedAt:    z.string().datetime().optional(),
 });
 
+export const createClientAccountSchema = z.object({
+  name:        z.string().min(2).max(100),
+  legalName:   z.string().optional(),
+  industry:    z.string().optional(),
+  size:        z.string().optional(),
+  website:     z.string().url().optional().or(z.literal("")),
+  description: z.string().optional(),
+  primaryContact: z.object({
+    firstName: z.string().min(1).max(50),
+    lastName:  z.string().min(1).max(50),
+    email:     z.string().email(),
+    phone:     z.string().optional(),
+    title:     z.string().optional(),
+    department:z.string().optional(),
+  }),
+  onboardingContext: z.object({
+    relationshipStage: z.enum(["PROSPECT", "CONTRACTING", "ONBOARDING", "ACTIVE"]),
+    primaryGoal:        z.string().min(10).max(1000),
+    knownConcerns:      z.string().max(2000).optional(),
+    participantGroups:  z.array(z.string()).default([]),
+    targetLaunchDate:   z.string().optional(),
+    accessibilityNeeds: z.string().max(1000).optional(),
+  }),
+});
+
 export const contactSchema = z.object({
   firstName:       z.string().min(1).max(50),
   lastName:        z.string().min(1).max(50),
