@@ -44,9 +44,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ? { ...existing, status: existing.statusBeforeSupport ?? "READY", statusBeforeSupport: undefined, supportNotes: undefined }
           : existing;
     if (parsed.data.action === "resend") {
-      const token = generateSurveyToken(audit.id);
+      const token = generateSurveyToken(audit.id, existing.id);
       const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-      const surveyUrl = `${origin}/survey/${token}?participant=${encodeURIComponent(existing.id)}`;
+      const surveyUrl = `${origin}/survey/${token}`;
       const sent = await sendAuditParticipantInvitation({ to: existing.email, name: existing.name, clientName: audit.client.name, auditName: audit.name, surveyUrl });
       if (!sent.ok) return badRequest("The invitation email could not be resent.");
       updated = {
