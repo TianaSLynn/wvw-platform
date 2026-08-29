@@ -125,13 +125,16 @@ export async function POST(req: Request) {
       const template = preferredNames
         .map((name) => templates.find((item) => item.name === name))
         .find(Boolean) ?? templates[0];
+      if (!template || template.sections.length === 0 || template.sections.every((section) => section.items.length === 0)) {
+        throw new Error("No complete published Organizational Initial Audit template is available");
+      }
 
       const auditCount = await db.audit.count({ where: { orgId: user.orgId } });
       const audit = await db.audit.create({
         data: {
           orgId: user.orgId,
           clientId: client.id,
-          templateId: template?.id,
+          templateId: template.id,
           name: `${client.name} — Organizational Initial Audit`,
           code: `OIA-${new Date().getFullYear()}-${String(auditCount + 1).padStart(3, "0")}`,
           description: "The required first diagnostic for identifying organization-wide concerns, evidence gaps, strengths, risks, and recommended specialty audits.",
@@ -149,7 +152,7 @@ export async function POST(req: Request) {
             collectionStatus: "LOCKED",
           },
           members: { create: { userId: user.id, role: "lead" } },
-          sections: template ? {
+          sections: {
             create: template.sections.map((section) => ({
               title: section.title,
               description: section.description,
@@ -173,7 +176,7 @@ export async function POST(req: Request) {
                 })),
               },
             })),
-          } : undefined,
+          },
         },
       });
       initialAuditId = audit.id;
