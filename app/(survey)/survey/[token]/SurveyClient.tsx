@@ -19,7 +19,7 @@ type Section = {
 };
 
 type SurveyData = {
-  audit: { id: string; name: string; org: string; client?: string | null };
+  audit: { id: string; name: string; org: string; client?: string | null; anonymous: boolean };
   sections: Section[];
   totalQuestions: number;
 };
@@ -42,7 +42,9 @@ function parseGuidanceHint(guidance: string | null): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-export default function SurveyClient({ survey, token, participantId }: { survey: SurveyData; token: string; participantId?: string }) {
+const CONSENT_VERSION = "WVW-OHI-CONSENT-2026-08-29";
+
+export default function SurveyClient({ survey, token }: { survey: SurveyData; token: string }) {
   if (survey.totalQuestions === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -69,6 +71,7 @@ export default function SurveyClient({ survey, token, participantId }: { survey:
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   const sections = survey.sections;
   const currentSection = sections[sectionIdx];
@@ -86,8 +89,7 @@ export default function SurveyClient({ survey, token, participantId }: { survey:
     setSubmitting(true);
     setError(null);
     try {
-      const query = participantId ? `?participant=${encodeURIComponent(participantId)}` : "";
-      const res = await fetch(`/api/survey/${token}${query}`, {
+      const res = await fetch(`/api/survey/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -96,6 +98,8 @@ export default function SurveyClient({ survey, token, participantId }: { survey:
           respondentDept: respondentDept || undefined,
           responses,
           notes: notes || undefined,
+          consentAccepted,
+          consentVersion: CONSENT_VERSION,
         }),
       });
       if (!res.ok) throw new Error("Submission failed");
@@ -149,8 +153,8 @@ export default function SurveyClient({ survey, token, participantId }: { survey:
             <p>🔒 All responses are confidential</p>
           </div>
 
-          {/* Optional respondent info */}
-          <div className="space-y-3 mb-6">
+          {/* Optional respondent info for explicitly identified audits only */}
+          {!survey.audit.anonymous && <div className="space-y-3 mb-6">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">About You (optional)</p>
             <input
               type="text"
@@ -175,11 +179,18 @@ export default function SurveyClient({ survey, token, participantId }: { survey:
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A84C]/30 focus:border-[#C9A84C]"
               />
             </div>
-          </div>
+          </div>}
+          {survey.audit.anonymous && <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-900"><strong>This audit does not request your name, email, role, or department.</strong><p className="mt-1 text-xs text-green-800">Invitation delivery status is maintained separately from your answers and is not included in the anonymous research export.</p></div>}
+
+          <label className="mb-5 flex items-start gap-3 rounded-2xl border border-gray-200 p-4 text-sm text-gray-700">
+            <input type="checkbox" checked={consentAccepted} onChange={(event) => setConsentAccepted(event.target.checked)} className="mt-0.5 h-4 w-4" />
+            <span>I understand participation is voluntary, I may stop before submitting, and my responses will be analyzed under WVW’s confidentiality and minimum-group reporting rules.</span>
+          </label>
 
           <button
             onClick={() => setStep("survey")}
-            className="w-full py-3 rounded-2xl bg-[#0F1C3F] text-white font-semibold text-sm hover:bg-[#1a2d5a] transition-colors flex items-center justify-center gap-2"
+            disabled={!consentAccepted}
+            className="w-full py-3 rounded-2xl bg-[#0F1C3F] text-white font-semibold text-sm hover:bg-[#1a2d5a] transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Begin Survey <ChevronRight size={16} />
           </button>
