@@ -3,6 +3,7 @@ import {
   getAnonymityThreshold,
   getReleaseStatus,
   getCollectionGateStatus,
+  getPrivacyConfigurationStatus,
 } from "../lib/audit-privacy";
 import {
   computeAuditScores,
@@ -42,6 +43,12 @@ test("collection cannot open before protection gates pass", () => {
   assert.equal(getCollectionGateStatus(21, steps).ready, true);
   steps[7]!.status = "PENDING";
   assert.match(getCollectionGateStatus(21, steps).reason ?? "", /Step 8/);
+});
+
+test("privacy configuration requires retention and deletion decisions", () => {
+  assert.equal(getPrivacyConfigurationStatus({}).ready, false);
+  assert.equal(getPrivacyConfigurationStatus({ responseRetentionDays: 365, evidenceRetentionDays: 730, deletionPolicy: "DELETE_AFTER_RETENTION" }).ready, true);
+  assert.equal(getPrivacyConfigurationStatus({ responseRetentionDays: 10, evidenceRetentionDays: 730, deletionPolicy: "DELETE_AFTER_RETENTION" }).ready, false);
 });
 
 test("Likert scoring and reverse scoring are correct", () => {
