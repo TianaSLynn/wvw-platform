@@ -131,10 +131,9 @@ export default function PrivacyPolicyPage() {
                 {[
                   ["Clerk",    "User authentication and identity management"],
                   ["Neon",     "PostgreSQL database hosting"],
-                  ["Vercel",   "Platform hosting and CDN"],
+                  ["Netlify",  "Platform hosting, serverless compute, CDN, and file storage"],
                   ["OpenAI","AI-powered analysis, briefings, and content generation"],
                   ["Resend",   "Transactional email delivery"],
-                  ["Vercel Blob","File and evidence storage"],
                 ].map(([p, pur]) => (
                   <tr key={p}>
                     <td className="py-2 font-medium">{p}</td>

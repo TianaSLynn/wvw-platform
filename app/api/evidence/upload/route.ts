@@ -67,13 +67,10 @@ export async function POST(req: Request) {
       fileSize  = file.size;
       mimeType  = file.type;
 
-      // Upload file — uses Vercel Blob if configured, local filesystem otherwise
-      try {
-        const result = await uploadFile(buffer, file.name, file.type, `evidence/${auditId}`);
-        fileUrl = result.url;
-      } catch {
-        fileUrl = null;
-      }
+      // Upload must complete before the evidence record is created. Production
+      // storage failures fail closed so the UI never reports a missing file as saved.
+      const result = await uploadFile(buffer, file.name, file.type, `evidence/${auditId}`);
+      fileUrl = result.url;
     }
 
     const evidence = await db.evidence.create({

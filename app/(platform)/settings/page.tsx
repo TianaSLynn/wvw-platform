@@ -6,10 +6,12 @@ import { Building2, Users, Zap, Bell, Shield, ChevronRight, Puzzle, AlertTriangl
 import { cn } from "@/lib/utils";
 
 const ENV_CHECKS = [
-  { key: "CLERK_WEBHOOK_SECRET",  label: "Clerk Webhook Secret",  desc: "Required for user sync on sign-up. Get it from Clerk Dashboard → Webhooks.",          href: "https://dashboard.clerk.com", critical: true  },
-  { key: "BLOB_READ_WRITE_TOKEN", label: "Vercel Blob Token",     desc: "Required for file uploads in Evidence Vault. Get it from Vercel Dashboard → Storage.", href: "https://vercel.com/dashboard",  critical: true  },
-  { key: "RESEND_API_KEY",        label: "Resend API Key",        desc: "Required for email notifications. Get it from resend.com/api-keys.",                    href: "https://resend.com/api-keys",   critical: false },
-  { key: "N8N_API_KEY",           label: "n8n API Key",           desc: "Required for automation triggers. Get it from your n8n instance → Settings → API.",    href: "#",                             critical: false },
+  { key: "CLERK_PRODUCTION_KEYS", label: "Clerk production keys", desc: "Replace the development keys with matching pk_live_ and sk_live_ keys from Clerk.", href: "https://dashboard.clerk.com", critical: true, ready: () => (process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "").startsWith("pk_live_") && (process.env.CLERK_SECRET_KEY ?? "").startsWith("sk_live_") },
+  { key: "CLERK_WEBHOOK_SIGNING_SECRET", label: "Clerk webhook signing secret", desc: "Required for secure user sync. Copy the signing secret from the Clerk webhook endpoint.", href: "https://dashboard.clerk.com", critical: true, ready: () => !!process.env.CLERK_WEBHOOK_SIGNING_SECRET },
+  { key: "DURABLE_EVIDENCE_STORAGE", label: "Durable Evidence Vault storage", desc: "Netlify Blobs is automatically available in production; no separate storage key is required.", href: "https://app.netlify.com", critical: true, ready: () => process.env.NETLIFY === "true" || !!process.env.BLOB_READ_WRITE_TOKEN },
+  { key: "RESEND_API_KEY", label: "Resend API key", desc: "Required for participant invitations and resending links.", href: "https://resend.com/api-keys", critical: true, ready: () => !!process.env.RESEND_API_KEY },
+  { key: "OPENAI_API_KEY", label: "OpenAI API key", desc: "Required for AI analysis, recommendations, and briefing drafts.", href: "https://platform.openai.com/api-keys", critical: true, ready: () => !!process.env.OPENAI_API_KEY },
+  { key: "N8N_API_KEY", label: "n8n API key", desc: "Optional for external automation triggers.", href: "#", critical: false, ready: () => !!process.env.N8N_API_KEY },
 ];
 
 export const metadata: Metadata = { title: "Settings" };
@@ -75,7 +77,7 @@ export default async function SettingsPage() {
     },
   ];
 
-  const missingEnv = isAdmin ? ENV_CHECKS.filter((e) => !process.env[e.key]) : [];
+  const missingEnv = isAdmin ? ENV_CHECKS.filter((e) => !e.ready()) : [];
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
@@ -93,7 +95,7 @@ export default async function SettingsPage() {
           </div>
           <div className="space-y-2">
             {ENV_CHECKS.map((e) => {
-              const missing = !process.env[e.key];
+              const missing = !e.ready();
               return (
                 <div key={e.key} className="flex items-start gap-2.5 text-xs">
                   {missing

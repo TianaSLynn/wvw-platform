@@ -32,14 +32,21 @@ function computeGrade(score: number): { grade: string; gradeColor: string } {
 // ─── Build checklist ──────────────────────────────────────────────────────────
 
 function buildItems(): StatusItem[] {
+  const netlify = process.env.NETLIFY === "true";
   const blob    = envSet("BLOB_READ_WRITE_TOKEN");
+  const durableStorage = netlify || blob;
   const resend  = envSet("RESEND_API_KEY");
   const n8n     = envSet("N8N_API_KEY");
-  const webhook = envSet("CLERK_WEBHOOK_SECRET");
+  const webhook = envSet("CLERK_WEBHOOK_SIGNING_SECRET");
   const openai  = envSet("OPENAI_API_KEY");
-  const clerk   = envSet("CLERK_SECRET_KEY");
+  const clerkPublishable = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+  const clerkSecret = process.env.CLERK_SECRET_KEY ?? "";
+  const clerkProduction = clerkPublishable.startsWith("pk_live_") && clerkSecret.startsWith("sk_live_");
   const db_url  = envSet("DATABASE_URL");
-  const prodUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").includes("localhost");
+  const directUrl = envSet("DIRECT_URL");
+  const encryption = envSet("ENCRYPTION_KEY");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const prodUrl = appUrl.startsWith("https://") && !appUrl.includes("localhost");
 
   return [
     // ── Features ──────────────────────────────────────────────────────────────
@@ -88,14 +95,15 @@ function buildItems(): StatusItem[] {
     { label: "Settings — Integrations",           done: true,  critical: false, category: "features" },
 
     // ── Infrastructure ────────────────────────────────────────────────────────
-    { label: "PostgreSQL database (Neon)",          done: db_url,    critical: true,  category: "infrastructure" },
-    { label: "Authentication (Clerk)",              done: clerk,     critical: true,  category: "infrastructure" },
+    { label: "PostgreSQL database (Neon)",          done: db_url && directUrl, critical: true, category: "infrastructure" },
+    { label: "Production authentication (Clerk)",   done: clerkProduction, critical: true, category: "infrastructure", note: "Production requires matching pk_live_ and sk_live_ Clerk keys" },
     { label: "AI API (OpenAI)",                     done: openai,    critical: true,  category: "infrastructure" },
-    { label: "File storage (Vercel Blob token)",    done: blob,      critical: true,  category: "infrastructure", note: "Add BLOB_READ_WRITE_TOKEN to env" },
+    { label: "Durable Evidence Vault storage",      done: durableStorage, critical: true, category: "infrastructure", note: "Netlify Blobs is automatic on Netlify; other hosts require BLOB_READ_WRITE_TOKEN" },
     { label: "Email service (Resend API key)",      done: resend,    critical: true,  category: "infrastructure", note: "Add RESEND_API_KEY — required for invites, notifications" },
-    { label: "Clerk webhook secret",               done: webhook,   critical: true,  category: "infrastructure", note: "Add CLERK_WEBHOOK_SECRET from Clerk dashboard" },
+    { label: "Clerk webhook signing secret",        done: webhook,   critical: true,  category: "infrastructure", note: "Add CLERK_WEBHOOK_SIGNING_SECRET from the Clerk webhook endpoint" },
+    { label: "Invitation token encryption",         done: encryption, critical: true, category: "infrastructure", note: "ENCRYPTION_KEY signs secure participant invitation tokens" },
     { label: "Workflow automation (n8n API key)",   done: n8n,       critical: false, category: "infrastructure", note: "n8n is optional; add N8N_API_KEY when ready" },
-    { label: "Vercel project connected",            done: true,      critical: false, category: "infrastructure" },
+    { label: "Netlify production project connected",done: netlify,   critical: true,  category: "infrastructure" },
 
     // ── Legal / Compliance ────────────────────────────────────────────────────
     { label: "Privacy Policy page (/privacy)",     done: true,  critical: false, category: "legal" },
@@ -114,9 +122,9 @@ function buildItems(): StatusItem[] {
     { label: "Loading states (loading.tsx)",       done: true,  critical: false, category: "quality" },
 
     // ── Production readiness ──────────────────────────────────────────────────
-    { label: "Production URL configured",          done: !prodUrl, critical: true,  category: "production", note: "NEXT_PUBLIC_APP_URL still set to localhost:3000" },
-    { label: "All env vars on Vercel dashboard",   done: blob && resend && webhook, critical: true, category: "production", note: "Copy all local .env vars to Vercel dashboard" },
-    { label: "Custom domain (wvwconsulting.com)",  done: false, critical: false, category: "production", note: "Connect production domain in Vercel" },
+    { label: "Production URL configured",          done: prodUrl, critical: true, category: "production", note: "Set NEXT_PUBLIC_APP_URL to the HTTPS production origin" },
+    { label: "Critical Netlify environment set",   done: db_url && directUrl && resend && openai && webhook && encryption && clerkProduction, critical: true, category: "production", note: "Production auth, webhook, database, email, AI, and encryption must all pass" },
+    { label: "Custom domain",                      done: false, critical: false, category: "production", note: "Connect the final WVW Intelligence production domain in Netlify when selected" },
     { label: "Error monitoring (Sentry or equiv)", done: false, critical: false, category: "production", note: "Recommended before public launch" },
     { label: "Mac desktop app (.app) working",     done: true,  critical: false, category: "production" },
     { label: "Org onboarding / welcome flow",      done: true,  critical: false, category: "production" },
