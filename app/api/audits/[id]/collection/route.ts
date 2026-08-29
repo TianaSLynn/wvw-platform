@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { ok, unauthorized, notFound, badRequest, serverError } from "@/lib/api-response";
 import { logActivity } from "@/lib/activity";
+import { getCollectionGateStatus } from "@/lib/audit-privacy";
 
 const schema = z.object({ action: z.enum(["open", "pause", "close"]) });
 
@@ -13,11 +14,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const parsed = schema.safeParse(await req.json());
     if (!parsed.success) return badRequest("Invalid collection action.");
-    const audit = await db.audit.findFirst({ where: { id, orgId: user.orgId } });
+    const audit = await db.audit.findFirst({
+      where: { id, orgId: user.orgId },
+      include: {
+        sections: { select: { _count: { select: { checklistItems: true } } } },
+        client: {
+          select: {
+            onboardingWorkflows: {
+              where: { entityType: "CLIENT", type: "ONBOARDING" },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              include: { steps: { orderBy: { sortOrder: "asc" } } },
+            },
+          },
+        },
+      },
+    });
     if (!audit) return notFound("Audit");
     const existingFields = audit.customFields && typeof audit.customFields === "object" && !Array.isArray(audit.customFields)
       ? audit.customFields as Record<string, unknown> : {};
     const now = new Date().toISOString();
+    if (parsed.data.action === "open") {
+      const questionCount = audit.sections.reduce((sum, section) => sum + section._count.checklistItems, 0);
+      const onboarding = audit.client.onboardingWorkflows[0];
+      const gate = getCollectionGateStatus(questionCount, onboarding?.steps);
+      if (!gate.ready) return badRequest(gate.reason ?? "Collection protection gate is incomplete.");
+    }
     const state = parsed.data.action === "open"
       ? { isLocked: false, isPublicTokenActive: true, label: "OPEN" }
       : parsed.data.action === "pause"
