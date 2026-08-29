@@ -53,6 +53,7 @@ interface Props {
   totalBilled: number;
   openBalance: number;
   currentUserId: string;
+  setupWarning?: string;
 }
 
 type Tab = "overview" | "onboarding" | "contacts" | "projects" | "audits" | "invoices";
@@ -64,7 +65,7 @@ const STATUS_BADGE: Record<string, Parameters<typeof Badge>[0]["variant"]> = {
   OVERDUE: "destructive", VOID: "secondary", CANCELLED: "secondary",
 };
 
-export default function ClientDetail({ client, totalBilled, openBalance }: Props) {
+export default function ClientDetail({ client, totalBilled, openBalance, setupWarning }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
   const [portalCopied, setPortalCopied] = useState(false);
 
@@ -118,10 +119,17 @@ export default function ClientDetail({ client, totalBilled, openBalance }: Props
         }
       />
 
+      {setupWarning && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <p className="font-semibold">Client account created with setup attention required</p>
+          <p className="mt-1">{setupWarning}</p>
+        </div>
+      )}
+
       {/* Client journey status */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 stagger-children">
         {[
-          { label: "Onboarding", value: client.onboardingWorkflows[0] ? `${client.onboardingWorkflows[0].steps.filter((step) => step.status === "COMPLETED").length}/${client.onboardingWorkflows[0].steps.length}` : "Needs setup", icon: Users, color: "text-gold" },
+          { label: "Onboarding", value: client.onboardingWorkflows[0] ? `${client.onboardingWorkflows[0].steps.filter((step) => step.status === "COMPLETED" || step.status === "SKIPPED").length}/${client.onboardingWorkflows[0].steps.length}` : "Needs setup", icon: Users, color: "text-gold" },
           { label: "Initial Audit", value: client.audits.find((audit) => audit.name.includes("Organizational Initial Audit"))?.status ?? "Not assigned", icon: ClipboardList, color: "text-purple-500" },
           { label: "Client Contacts", value: client._count.contacts, icon: Users, color: "text-blue-500" },
           { label: "Open Balance", value: formatCurrency(openBalance, "USD", true), icon: FileText, color: openBalance > 0 ? "text-amber-500" : "text-green-500" },
@@ -180,7 +188,7 @@ function OnboardingTab({ client }: { client: Props["client"] }) {
     return <div className="bg-card rounded-xl border border-border p-8 text-center"><h3 className="font-semibold">No client onboarding workflow</h3><p className="mt-1 text-sm text-muted-foreground">This client was created before automatic onboarding was connected. Start or repair onboarding before launching the audit.</p></div>;
   }
 
-  const completed = workflow.steps.filter((step) => step.status === "COMPLETED").length;
+  const completed = workflow.steps.filter((step) => step.status === "COMPLETED" || step.status === "SKIPPED").length;
   const percent = workflow.steps.length ? Math.round((completed / workflow.steps.length) * 100) : 0;
   return (
     <div className="space-y-4">
