@@ -4,9 +4,9 @@
  */
 import { db } from "@/lib/db";
 import { ok, notFound, serverError, badRequest } from "@/lib/api-response";
-import { verifySurveyToken } from "@/lib/survey-token";
+import { verifySurveyTokenDetails } from "@/lib/survey-token";
 import { z } from "zod";
-import { isAnonymousAudit } from "@/lib/audit-privacy";
+import { isAnonymousAudit, PARTICIPANT_CONSENT_VERSION } from "@/lib/audit-privacy";
 import type { Prisma } from "@prisma/client";
 
 const submitSchema = z.object({
@@ -16,6 +16,8 @@ const submitSchema = z.object({
   respondentDept:  z.string().optional(),
   responses: z.record(z.string(), z.enum(["1","2","3","4","5"])),
   notes: z.string().optional(),
+  consentAccepted: z.literal(true),
+  consentVersion: z.literal(PARTICIPANT_CONSENT_VERSION),
 });
 
 export async function GET(
@@ -24,13 +26,14 @@ export async function GET(
 ) {
   try {
     const { token } = await params;
-    const auditId = verifySurveyToken(token);
-    if (!auditId) return notFound("Survey");
+    const tokenDetails = verifySurveyTokenDetails(token);
+    if (!tokenDetails) return notFound("Survey");
+    const { auditId } = tokenDetails;
 
     const audit = await db.audit.findFirst({
       where: { id: auditId, isPublicTokenActive: true, isLocked: false },
       select: {
-        id: true, name: true, type: true,
+        id: true, name: true, type: true, customFields: true,
         client: { select: { name: true } },
         org: { select: { name: true } },
         sections: {
@@ -54,7 +57,7 @@ export async function GET(
     const sections = audit.sections.filter((s) => s.checklistItems.length > 0);
     const totalQuestions = sections.reduce((s, sec) => s + sec.checklistItems.length, 0);
 
-    return ok({ audit: { id: audit.id, name: audit.name, org: audit.org.name, client: audit.client?.name }, sections, totalQuestions });
+    return ok({ audit: { id: audit.id, name: audit.name, org: audit.org.name, client: audit.client?.name, anonymous: isAnonymousAudit(audit.customFields && typeof audit.customFields === "object" ? audit.customFields as Record<string, unknown> : null) }, sections, totalQuestions });
   } catch (e) { return serverError(e); }
 }
 
@@ -64,8 +67,9 @@ export async function POST(
 ) {
   try {
     const { token } = await params;
-    const auditId = verifySurveyToken(token);
-    if (!auditId) return notFound("Survey");
+    const tokenDetails = verifySurveyTokenDetails(token);
+    if (!tokenDetails) return notFound("Survey");
+    const { auditId, participantId } = tokenDetails;
 
     const audit = await db.audit.findFirst({
       where: { id: auditId, isPublicTokenActive: true, isLocked: false },
@@ -91,14 +95,13 @@ export async function POST(
         token: null,
         respondentName:  anonymous ? null : parsed.data.respondentName,
         respondentEmail: anonymous ? null : parsed.data.respondentEmail,
-        respondentRole:  parsed.data.respondentRole,
-        respondentDept:  parsed.data.respondentDept,
+        respondentRole:  anonymous ? null : parsed.data.respondentRole,
+        respondentDept:  anonymous ? null : parsed.data.respondentDept,
         responses:       parsed.data.responses,
         notes:           parsed.data.notes,
       },
     });
 
-    const participantId = new URL(req.url).searchParams.get("participant");
     if (participantId) {
       const existingFields = audit.customFields && typeof audit.customFields === "object" && !Array.isArray(audit.customFields)
         ? audit.customFields as Record<string, unknown> : {};
