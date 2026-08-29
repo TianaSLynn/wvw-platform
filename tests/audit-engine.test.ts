@@ -92,11 +92,13 @@ test("audit scoring aggregates separate anonymous submissions", () => {
 });
 
 test("survey invitation signatures reject tampering", async () => {
-  const { generateSurveyToken, verifySurveyToken } = await import("../lib/survey-token");
+  const { generateSurveyToken, verifySurveyToken, verifySurveyTokenDetails } = await import("../lib/survey-token");
   const token = generateSurveyToken("audit-test-123");
   assert.equal(verifySurveyToken(token), "audit-test-123");
   const tampered = `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
   assert.equal(verifySurveyToken(tampered), null);
+  const participantToken = generateSurveyToken("audit-test-123", "participant-456");
+  assert.deepEqual(verifySurveyTokenDetails(participantToken), { auditId: "audit-test-123", participantId: "participant-456" });
 });
 
 async function main() {
