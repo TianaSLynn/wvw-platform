@@ -48,6 +48,7 @@ const labelCls = "block text-xs font-semibold text-muted-foreground mb-1.5 upper
 export default function EditClientForm({ client }: Props) {
   const router = useRouter();
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -69,6 +70,7 @@ export default function EditClientForm({ client }: Props) {
   });
 
   const onSubmit = async (data: FormData) => {
+    setSaveError(null);
     const res = await fetch(`/api/clients/${client.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -94,6 +96,9 @@ export default function EditClientForm({ client }: Props) {
     if (res.ok) {
       setSaved(true);
       setTimeout(() => router.push(`/clients/${client.id}`), 800);
+    } else {
+      const body = await res.json().catch(() => null);
+      setSaveError(body?.error ?? "The client account could not be updated.");
     }
   };
 
@@ -120,6 +125,7 @@ export default function EditClientForm({ client }: Props) {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {saveError && <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{saveError}</div>}
         {/* Basic Info */}
         <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
           <h2 className="font-semibold text-sm">Basic Information</h2>
