@@ -208,6 +208,19 @@ function OnboardingTab({ client }: { client: Props["client"] }) {
     else router.refresh();
     setUpdatingStep(null);
   }
+  async function updateDocument(stepId: string, documentCollected: boolean) {
+    setUpdatingStep(stepId);
+    setError(null);
+    const response = await fetch(`/api/onboarding/${workflowId}/steps`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stepId, documentCollected }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) setError(body?.error ?? "The document status could not be updated.");
+    else router.refresh();
+    setUpdatingStep(null);
+  }
   return (
     <div className="space-y-4">
       {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
@@ -221,6 +234,7 @@ function OnboardingTab({ client }: { client: Props["client"] }) {
             <div className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${step.status === "COMPLETED" ? "bg-green-500/15 text-green-600" : step.status === "BLOCKED" ? "bg-muted text-muted-foreground" : "bg-gold/15 text-gold"}`}>{step.sortOrder}</div>
             <div className="min-w-0 flex-1"><p className="text-sm font-medium">{step.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{step.status.replaceAll("_", " ")}{step.documentRequired ? ` · ${step.documentCollected ? "Document received" : "Document needed"}` : ""}</p></div>
             <div className="flex flex-wrap justify-end gap-1.5">
+              {step.documentRequired && <button disabled={updatingStep === step.id} onClick={() => updateDocument(step.id, !step.documentCollected)} className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50">{step.documentCollected ? "Document received ✓" : "Mark document received"}</button>}
               {step.status === "PENDING" && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "IN_PROGRESS")} className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50">Start</button>}
               {(step.status === "PENDING" || step.status === "IN_PROGRESS") && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "COMPLETED")} className="rounded-md bg-green-600 px-2 py-1 text-[11px] text-white disabled:opacity-50">Complete</button>}
               {(step.status === "PENDING" || step.status === "IN_PROGRESS") && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "SKIPPED")} className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50">Skip</button>}
