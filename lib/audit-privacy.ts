@@ -1,6 +1,7 @@
 type AuditCustomFields = Record<string, unknown> | null | undefined;
 
 export const DEFAULT_ANONYMITY_THRESHOLD = 5;
+export const PARTICIPANT_CONSENT_VERSION = "WVW-OHI-CONSENT-2026-08-29";
 
 export function getAnonymityThreshold(customFields: AuditCustomFields): number {
   const raw = customFields?.minimumAnonymousResponses;
