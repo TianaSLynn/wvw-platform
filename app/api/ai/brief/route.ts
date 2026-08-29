@@ -8,11 +8,11 @@
  *   - Claude synthesis → structured JSON brief
  *
  * Reddit public JSON API — no key required.
- * Requires ANTHROPIC_API_KEY in env.
+ * Requires OPENAI_API_KEY in env.
  * Responses cached 30 min via Next.js fetch cache.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ok, unauthorized, serverError } from "@/lib/api-response";
@@ -364,15 +364,13 @@ Return ONLY valid JSON — no markdown fences, no extra text before or after:
   }
 }`;
 
-    // ── 5. Call Claude ───────────────────────────────────────────────────────
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2500,
-      messages: [{ role: "user", content: prompt }],
+    // ── 5. Generate the governed WVW briefing ───────────────────────────────
+    const openai = new OpenAI();
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-5.5",
+      input: prompt,
     });
-
-    const rawText = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const rawText = response.output_text;
     const jsonText = rawText.replace(/^```(?:json)?\s*/m, "").replace(/```\s*$/m, "").trim();
 
     let brief: unknown;
@@ -391,12 +389,12 @@ Return ONLY valid JSON — no markdown fences, no extra text before or after:
     console.error("[AI Brief Error]", e);
     const msg = e instanceof Error ? e.message.toLowerCase() : "";
     const isAuthError = msg.includes("401") || msg.includes("authentication") ||
-      msg.includes("invalid x-api-key") || msg.includes("api key") ||
+      msg.includes("invalid_api_key") || msg.includes("api key") ||
       msg.includes("apikey") || (e as { status?: number })?.status === 401;
     if (isAuthError) {
       return new Response(JSON.stringify({
         error: "api_key_missing",
-        message: "ANTHROPIC_API_KEY is not configured in Vercel. Run: npx vercel env add ANTHROPIC_API_KEY production",
+        message: "OPENAI_API_KEY is not configured for this deployment.",
       }), { status: 503 });
     }
     return serverError(e);

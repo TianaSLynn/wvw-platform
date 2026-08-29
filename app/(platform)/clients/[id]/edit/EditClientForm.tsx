@@ -15,10 +15,12 @@ const schema = z.object({
   size:          z.string().optional(),
   website:       z.string().url("Must be a valid URL").optional().or(z.literal("")),
   description:   z.string().optional(),
-  billingEmail:  z.string().email("Must be a valid email").optional().or(z.literal("")),
-  taxId:         z.string().optional(),
-  paymentTerms:  z.coerce.number().int().min(0).max(365).default(30),
-  defaultRate:   z.coerce.number().positive("Must be positive").optional().or(z.literal("")),
+  contactFirstName: z.string().min(1, "Required"),
+  contactLastName: z.string().min(1, "Required"),
+  contactEmail: z.string().email("Must be a valid email"),
+  contactPhone: z.string().optional(),
+  contactTitle: z.string().optional(),
+  contactDepartment: z.string().optional(),
   isActive:      z.boolean().default(true),
 });
 
@@ -30,6 +32,7 @@ interface Props {
     size: string | null; website: string | null; description: string | null;
     billingEmail: string | null; taxId: string | null; paymentTerms: number;
     defaultRate: number | null; isActive: boolean;
+    primaryContact: { firstName: string; lastName: string; email: string | null; phone: string | null; title: string | null; department: string | null } | null;
   };
 }
 
@@ -55,10 +58,12 @@ export default function EditClientForm({ client }: Props) {
       size:         client.size ?? "",
       website:      client.website ?? "",
       description:  client.description ?? "",
-      billingEmail: client.billingEmail ?? "",
-      taxId:        client.taxId ?? "",
-      paymentTerms: client.paymentTerms,
-      defaultRate:  client.defaultRate ?? ("" as unknown as number),
+      contactFirstName: client.primaryContact?.firstName ?? "",
+      contactLastName: client.primaryContact?.lastName ?? "",
+      contactEmail: client.primaryContact?.email ?? "",
+      contactPhone: client.primaryContact?.phone ?? "",
+      contactTitle: client.primaryContact?.title ?? "",
+      contactDepartment: client.primaryContact?.department ?? "",
       isActive:     client.isActive,
     },
   });
@@ -68,10 +73,21 @@ export default function EditClientForm({ client }: Props) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...data,
-        defaultRate: data.defaultRate === ("" as unknown as number) ? undefined : Number(data.defaultRate),
-        website:     data.website || undefined,
-        billingEmail: data.billingEmail || undefined,
+        name: data.name,
+        legalName: data.legalName,
+        industry: data.industry,
+        size: data.size,
+        website: data.website || undefined,
+        description: data.description,
+        isActive: data.isActive,
+        primaryContact: {
+          firstName: data.contactFirstName,
+          lastName: data.contactLastName,
+          email: data.contactEmail,
+          phone: data.contactPhone,
+          title: data.contactTitle,
+          department: data.contactDepartment,
+        },
       }),
     });
 
@@ -97,7 +113,7 @@ export default function EditClientForm({ client }: Props) {
             <Building2 size={18} className="text-gold" />
           </div>
           <div>
-            <h1 className="text-xl font-bold">Edit Client</h1>
+            <h1 className="text-xl font-bold">Manage Client Account</h1>
             <p className="text-xs text-muted-foreground">{client.name}</p>
           </div>
         </div>
@@ -149,29 +165,44 @@ export default function EditClientForm({ client }: Props) {
           </div>
         </div>
 
-        {/* Billing */}
+        {/* Primary contact */}
         <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-          <h2 className="font-semibold text-sm">Billing & Finance</h2>
+          <div>
+            <h2 className="font-semibold text-sm">Primary Client Contact</h2>
+            <p className="text-xs text-muted-foreground mt-1">The person WVW supports through onboarding and the Organizational Initial Audit.</p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Billing Email</label>
-              <input {...register("billingEmail")} className={inputCls} placeholder="billing@client.org" />
-              {errors.billingEmail && <p className="text-red-500 text-xs mt-1">{errors.billingEmail.message}</p>}
+              <label className={labelCls}>First Name *</label>
+              <input {...register("contactFirstName")} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Tax ID / EIN</label>
-              <input {...register("taxId")} className={inputCls} placeholder="XX-XXXXXXX" />
+              <label className={labelCls}>Last Name *</label>
+              <input {...register("contactLastName")} className={inputCls} />
+            </div>
+            <div className="col-span-2">
+              <label className={labelCls}>Email *</label>
+              <input {...register("contactEmail")} className={inputCls} placeholder="name@organization.org" />
+              {errors.contactEmail && <p className="text-red-500 text-xs mt-1">{errors.contactEmail.message}</p>}
             </div>
             <div>
-              <label className={labelCls}>Payment Terms (days)</label>
-              <input type="number" {...register("paymentTerms")} className={inputCls} min={0} max={365} />
+              <label className={labelCls}>Title</label>
+              <input {...register("contactTitle")} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Default Rate ($/hr)</label>
-              <input type="number" step="0.01" {...register("defaultRate")} className={inputCls} placeholder="0.00" />
-              {errors.defaultRate && <p className="text-red-500 text-xs mt-1">{errors.defaultRate.message}</p>}
+              <label className={labelCls}>Department</label>
+              <input {...register("contactDepartment")} className={inputCls} />
+            </div>
+            <div className="col-span-2">
+              <label className={labelCls}>Phone</label>
+              <input {...register("contactPhone")} className={inputCls} />
             </div>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-gold/25 bg-gold/5 p-5">
+          <p className="text-sm font-semibold">Billing is managed separately</p>
+          <p className="text-xs text-muted-foreground mt-1">Invoices, payment terms, rates, and tax details belong in Finance &amp; Business after the engagement scope is approved. They are no longer part of client account onboarding.</p>
         </div>
 
         {/* Status */}

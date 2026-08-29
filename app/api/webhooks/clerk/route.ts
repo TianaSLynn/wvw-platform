@@ -1,21 +1,6 @@
-/**
- * Clerk Workflow HTTP action endpoint.
- *
- * Configure in Clerk Dashboard → Workflows:
- *   Trigger: user.created | user.updated | user.deleted
- *   Step: HTTP Request
- *     URL:    {APP_URL}/api/webhooks/clerk
- *     Method: POST
- *     Headers:
- *       Authorization: Bearer {CLERK_WORKFLOW_SECRET}
- *     Body: Use Clerk's default event payload
- *
- * Note: profile data (name, email, avatar) is also synced automatically
- * on every authenticated request via getCurrentUser(), so this endpoint
- * is only strictly required for user.deleted events.
- */
+/** Clerk webhook endpoint for user lifecycle synchronization. */
 
-import { timingSafeEqual } from "crypto";
+import { Webhook } from "svix";
 import { provisionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -38,28 +23,24 @@ function unauthorized() {
 }
 
 export async function POST(req: Request) {
-  // Verify bearer token — CLERK_WORKFLOW_SECRET must be set; never allow unauthenticated access
-  const secret = process.env.CLERK_WORKFLOW_SECRET ?? process.env.CLERK_WEBHOOK_SECRET;
-  if (!secret) return unauthorized(); // hard fail — always require a secret in production
+  const secret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
+  if (!secret) return unauthorized();
 
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+  const svixId = req.headers.get("svix-id");
+  const svixTimestamp = req.headers.get("svix-timestamp");
+  const svixSignature = req.headers.get("svix-signature");
+  if (!svixId || !svixTimestamp || !svixSignature) return unauthorized();
 
-  // Use timing-safe comparison to prevent timing attacks
-  try {
-    const secretBuf = Buffer.from(secret);
-    const tokenBuf  = Buffer.alloc(secretBuf.length);
-    Buffer.from(token).copy(tokenBuf);
-    if (!timingSafeEqual(tokenBuf, secretBuf)) return unauthorized();
-  } catch {
-    return unauthorized();
-  }
-
+  const payload = await req.text();
   let event: ClerkUserEvent;
   try {
-    event = await req.json();
+    event = new Webhook(secret).verify(payload, {
+      "svix-id": svixId,
+      "svix-timestamp": svixTimestamp,
+      "svix-signature": svixSignature,
+    }) as ClerkUserEvent;
   } catch {
-    return new Response("Invalid JSON", { status: 400 });
+    return unauthorized();
   }
 
   const { type, data } = event;

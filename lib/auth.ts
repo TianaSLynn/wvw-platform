@@ -2,6 +2,8 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import type { UserRole } from "@prisma/client";
 import { sendWelcomeEmail } from "@/lib/email";
+import { headers } from "next/headers";
+import { timingSafeEqual } from "node:crypto";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Auth helpers for Server Components & Route Handlers
@@ -16,12 +18,47 @@ const ORG_INCLUDE = {
   },
 } as const;
 
+function secretsMatch(candidate: string, expected: string): boolean {
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length
+    && timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
+/**
+ * A deliberately narrow test identity for isolated Netlify deploy previews.
+ * It requires both the deploy-preview runtime context and a secret request
+ * header. Production can never opt into this path, even if the secret were
+ * accidentally copied into that environment.
+ */
+async function getPreviewQaUser() {
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("host") ?? "";
+  if (process.env.WVW_QA_PREVIEW_AUTH_ENABLED !== "true"
+    || !host.startsWith("deploy-preview-")) return null;
+
+  const expectedToken = process.env.WVW_QA_TEST_TOKEN;
+  const qaEmail = process.env.WVW_QA_USER_EMAIL;
+  if (!expectedToken || !qaEmail) return null;
+
+  const candidateToken = requestHeaders.get("x-wvw-qa-token") ?? "";
+  if (!secretsMatch(candidateToken, expectedToken)) return null;
+
+  return db.user.findFirst({
+    where: { email: qaEmail },
+    include: ORG_INCLUDE,
+  });
+}
+
 /**
  * Get the current authenticated WVW user from the database.
  * Always syncs profile data from Clerk so updates are reflected without a webhook.
  * Returns null if not authenticated.
  */
 export async function getCurrentUser() {
+  const previewQaUser = await getPreviewQaUser();
+  if (previewQaUser) return previewQaUser;
+
   const { userId } = await auth();
   if (!userId) return null;
 

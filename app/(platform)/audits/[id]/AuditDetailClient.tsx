@@ -60,6 +60,8 @@ type Audit = {
   frameworks: Array<{ framework: { name: string; type: string } }>;
   planningStartDate: Date | null; fieldworkStartDate: Date | null;
   fieldworkEndDate: Date | null; reportDueDate: Date | null;
+  isLocked: boolean; isPublicTokenActive: boolean;
+  customFields?: Record<string, unknown>;
 };
 
 interface Props {
@@ -315,7 +317,7 @@ export default function AuditDetailClient({
         {tab === "evidence"  && <EvidenceTab evidence={audit.evidence} auditId={audit.id} />}
         {tab === "tracker"   && <EvidenceTrackerTab auditId={audit.id} />}
         {tab === "team"      && <TeamTab members={audit.members} />}
-        {tab === "survey"    && <SurveyDistributionTab auditId={audit.id} auditName={audit.name} onScored={() => { showToast("Scores computed — switching to Results tab."); setTab("results"); }} />}
+        {tab === "survey"    && <SurveyDistributionTab auditId={audit.id} auditName={audit.name} initialCollectionStatus={audit.isLocked ? "CLOSED" : audit.isPublicTokenActive ? "OPEN" : "PAUSED"} onScored={() => { showToast("Scores computed — switching to Results tab."); setTab("results"); }} />}
         {tab === "results"   && <ResultsTab auditId={audit.id} />}
       </div>
     </div>
@@ -1083,7 +1085,7 @@ function TeamTab({ members }: { members: Audit["members"] }) {
 }
 
 // ─── Survey Distribution Tab ──────────────────────────────────────────────────
-function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: string; auditName: string; onScored?: () => void }) {
+function SurveyDistributionTab({ auditId, auditName, initialCollectionStatus, onScored }: { auditId: string; auditName: string; initialCollectionStatus: "OPEN" | "PAUSED" | "CLOSED"; onScored?: () => void }) {
   const [surveyUrl, setSurveyUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1091,6 +1093,86 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
   const [loadingResults, setLoadingResults] = useState(false);
   const [avgScores, setAvgScores] = useState<Record<string, { avg: number; count: number }> | null>(null);
   const [scoreSuccess, setScoreSuccess] = useState(false);
+  const [participants, setParticipants] = useState<Array<{
+    id: string; name: string; email: string; group: string; status: string;
+    inviteCount: number; lastSentAt: string; supportNotes?: string;
+  }>>([]);
+  const [participantName, setParticipantName] = useState("");
+  const [participantEmail, setParticipantEmail] = useState("");
+  const [participantGroup, setParticipantGroup] = useState("Workforce");
+  const [participantBusy, setParticipantBusy] = useState(false);
+  const [participantError, setParticipantError] = useState<string | null>(null);
+  const [showBulkParticipants, setShowBulkParticipants] = useState(false);
+  const [bulkParticipants, setBulkParticipants] = useState("");
+  const [collectionStatus, setCollectionStatus] = useState(initialCollectionStatus);
+  const [collectionBusy, setCollectionBusy] = useState(false);
+
+  const changeCollection = async (action: "open" | "pause" | "close") => {
+    setCollectionBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/collection`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Collection status could not be changed.");
+      setCollectionStatus(body.data.collectionStatus);
+      if (action !== "open") setSurveyUrl(null);
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Collection status could not be changed."); }
+    finally { setCollectionBusy(false); }
+  };
+
+  const loadParticipants = async () => {
+    const res = await fetch(`/api/audits/${auditId}/participants`);
+    if (!res.ok) return;
+    const { data } = await res.json() as { data: { participants: typeof participants } };
+    setParticipants(data.participants);
+  };
+
+  useEffect(() => { void loadParticipants(); }, [auditId]);
+
+  const addParticipant = async () => {
+    setParticipantBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/participants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: participantName, email: participantEmail, group: participantGroup, sendNow: true }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Participant could not be added.");
+      setParticipantName(""); setParticipantEmail("");
+      await loadParticipants();
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participant could not be added."); }
+    finally { setParticipantBusy(false); }
+  };
+
+  const updateParticipant = async (participantId: string, action: "resend" | "support" | "clear-support") => {
+    const supportNotes = action === "support" ? window.prompt("What technical assistance does this participant need?") ?? "" : undefined;
+    if (action === "support" && !supportNotes) return;
+    setParticipantBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/participants/${participantId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, supportNotes }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Participant could not be updated.");
+      await loadParticipants();
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participant could not be updated."); }
+    finally { setParticipantBusy(false); }
+  };
+
+  const importParticipants = async () => {
+    const parsed = bulkParticipants.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      const [name, email, group] = line.split(",").map((value) => value?.trim());
+      return { name: name ?? "", email: email ?? "", group: group || "Workforce" };
+    });
+    if (!parsed.length) return;
+    setParticipantBusy(true); setParticipantError(null);
+    try {
+      const res = await fetch(`/api/audits/${auditId}/participants/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participants: parsed }) });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Participants could not be imported.");
+      setBulkParticipants(""); setShowBulkParticipants(false); await loadParticipants();
+    } catch (error) { setParticipantError(error instanceof Error ? error.message : "Participants could not be imported."); }
+    finally { setParticipantBusy(false); }
+  };
 
   const generateLink = async () => {
     setLoading(true);
@@ -1125,6 +1207,16 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <div className="section-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div><div className="flex items-center gap-2"><Shield size={15} className="text-gold" /><h3 className="text-sm font-semibold">Audit Collection Control</h3><Badge variant={collectionStatus === "OPEN" ? "success" : collectionStatus === "CLOSED" ? "secondary" : "warning"}>{collectionStatus}</Badge></div><p className="mt-1 text-xs text-muted-foreground">Open accepts responses, Pause temporarily disables every link, and Close locks collection.</p></div>
+          <div className="flex items-center gap-2">
+            {collectionStatus !== "OPEN" && <button type="button" disabled={collectionBusy || collectionStatus === "CLOSED"} onClick={() => changeCollection("open")} className="btn-primary text-xs">Open collection</button>}
+            {collectionStatus === "OPEN" && <button type="button" disabled={collectionBusy} onClick={() => changeCollection("pause")} className="btn-ghost text-xs">Pause</button>}
+            {collectionStatus !== "CLOSED" && <button type="button" disabled={collectionBusy} onClick={() => changeCollection("close")} className="btn-ghost text-xs text-red-500">Close audit</button>}
+          </div>
+        </div>
+      </div>
       {/* Explainer */}
       <div className="section-card p-5">
         <div className="flex items-center gap-2 mb-3">
@@ -1152,11 +1244,11 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
           <button
             type="button"
             onClick={generateLink}
-            disabled={loading}
+            disabled={loading || collectionStatus !== "OPEN"}
             className="btn-primary flex items-center gap-2"
           >
             <Send size={14} />
-            {loading ? "Generating…" : "Generate Survey Link"}
+            {loading ? "Generating…" : collectionStatus === "OPEN" ? "Generate Survey Link" : "Open collection to generate link"}
           </button>
         ) : (
           <div className="space-y-3">
@@ -1186,6 +1278,55 @@ function SurveyDistributionTab({ auditId, auditName, onScored }: { auditId: stri
             <p className="text-[11px] text-muted-foreground">
               Share this link via email, Slack, or ask your client to forward it to their employees. Each submission is confidential.
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* Participant support registry — identities stay separate from answers */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <div className="flex items-center gap-2"><Users size={15} className="text-gold" /><h3 className="text-sm font-semibold">Participant Management</h3></div>
+          <p className="mt-1 text-[11px] text-muted-foreground">Manage access and technical support without connecting a person to their confidential answers.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 p-4 border-b border-border md:grid-cols-5">
+          {[
+            ["Assigned", participants.length],
+            ["Ready", participants.filter((item) => item.status === "READY").length],
+            ["Invited/Open", participants.filter((item) => ["INVITED", "OPENED"].includes(item.status)).length],
+            ["Submitted", participants.filter((item) => item.status === "SUBMITTED").length],
+            ["Needs support", participants.filter((item) => item.status === "NEEDS_SUPPORT").length],
+          ].map(([label, value]) => <div key={String(label)} className="rounded-xl bg-muted/50 p-3 text-center"><p className="text-lg font-semibold">{value}</p><p className="text-[10px] text-muted-foreground">{label}</p></div>)}
+        </div>
+        <div className="p-4 border-b border-border grid gap-3 md:grid-cols-[1fr_1.4fr_1fr_auto]">
+          <input value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Participant name" className="input-field text-xs" />
+          <input value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="Email address" type="email" className="input-field text-xs" />
+          <select value={participantGroup} onChange={(event) => setParticipantGroup(event.target.value)} className="input-field text-xs">
+            <option>Workforce</option><option>Leadership</option><option>Governance</option><option>Service Recipient</option><option>Other</option>
+          </select>
+          <button type="button" onClick={addParticipant} disabled={participantBusy || !participantName || !participantEmail} className="btn-primary text-xs flex items-center gap-1.5"><Plus size={13} /> Add &amp; send</button>
+        </div>
+        <div className="px-4 py-3 border-b border-border">
+          <button type="button" className="btn-ghost text-xs" onClick={() => setShowBulkParticipants((value) => !value)}><Users size={12} className="inline mr-1" />{showBulkParticipants ? "Hide bulk setup" : "Add multiple participants"}</button>
+          {showBulkParticipants && <div className="mt-3 space-y-2"><textarea value={bulkParticipants} onChange={(event) => setBulkParticipants(event.target.value)} rows={5} className="input-field w-full text-xs font-mono" placeholder={"Name, email, group\nJordan Lee, jordan@example.org, Workforce\nMorgan Hill, morgan@example.org, Leadership"} /><div className="flex items-center justify-between gap-3"><p className="text-[11px] text-muted-foreground">One person per line. Bulk-added participants are staged as Ready so you can review before sending.</p><button type="button" onClick={importParticipants} disabled={participantBusy || !bulkParticipants.trim()} className="btn-primary text-xs">Import list</button></div></div>}
+        </div>
+        {participantError && <p className="px-4 pt-3 text-xs text-red-500">{participantError}</p>}
+        {participants.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">No participants have been added. You can still use the general anonymous link above.</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {participants.map((participant) => (
+              <div key={participant.id} className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2"><p className="text-sm font-medium truncate">{participant.name}</p><Badge variant={participant.status === "SUBMITTED" ? "success" : participant.status === "NEEDS_SUPPORT" ? "warning" : "secondary"}>{participant.status.replace(/_/g, " ")}</Badge></div>
+                  <p className="text-xs text-muted-foreground truncate">{participant.email} · {participant.group} · sent {participant.inviteCount} time{participant.inviteCount === 1 ? "" : "s"}</p>
+                  {participant.supportNotes && <p className="mt-1 text-xs text-amber-600">Support: {participant.supportNotes}</p>}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {participant.status !== "SUBMITTED" && <button type="button" disabled={participantBusy} onClick={() => updateParticipant(participant.id, "resend")} className="btn-ghost text-xs"><RefreshCw size={12} className="inline mr-1" />Resend</button>}
+                  <button type="button" disabled={participantBusy} onClick={() => updateParticipant(participant.id, participant.status === "NEEDS_SUPPORT" ? "clear-support" : "support")} className="btn-ghost text-xs">{participant.status === "NEEDS_SUPPORT" ? "Resolve support" : "Tech support"}</button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -1394,6 +1535,12 @@ function ResultsTab({ auditId }: { auditId: string }) {
             >
               <TrendingUp size={11} /> {computing ? "Recomputing…" : "Recompute Scores"}
             </button>
+            <a
+              href={`/api/audits/${auditId}/research-export`}
+              className="btn-ghost text-xs inline-flex items-center gap-1"
+            >
+              <Download size={11} /> Download Anonymous Research CSV
+            </a>
           </div>
         </div>
       </div>

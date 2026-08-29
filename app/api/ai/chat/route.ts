@@ -1,14 +1,13 @@
 import { getCurrentUser } from "@/lib/auth";
 import { unauthorized, tooManyRequests } from "@/lib/api-response";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { db } from "@/lib/db";
-
-const client = new Anthropic();
+import { getAnonymityThreshold, getReleaseStatus } from "@/lib/audit-privacy";
 
 // ─── Tool definitions ─────────────────────────────────────────────────────────
 
-const TOOLS: Anthropic.Tool[] = [
+const TOOL_DEFINITIONS = [
   {
     name: "get_dashboard_snapshot",
     description: "Get high-level counts and stats across the entire platform: clients, audits, findings, employees, invoices, onboarding, jobs.",
@@ -56,7 +55,7 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "get_audit_detail",
-    description: "Get full audit details including all sections, checklist items, findings, evidence, and survey results.",
+    description: "Get audit details, findings, evidence, and threshold-released anonymous results. Never returns raw participant answers or identities.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -176,6 +175,14 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
+const TOOLS = TOOL_DEFINITIONS.map((tool) => ({
+  type: "function" as const,
+  name: tool.name,
+  description: tool.description,
+  parameters: tool.input_schema,
+  strict: false,
+}));
+
 // ─── Tool execution ───────────────────────────────────────────────────────────
 
 async function executeTool(name: string, input: Record<string, unknown>, orgId: string): Promise<unknown> {
@@ -287,6 +294,17 @@ async function executeTool(name: string, input: Record<string, unknown>, orgId: 
         },
         include: {
           client: { select: { name: true } },
+          auditResult: {
+            include: {
+              domainResults: { orderBy: { score: "asc" } },
+              patternFlags: { orderBy: { avgScore: "asc" } },
+            },
+          },
+          recommendations: {
+            include: { pathway: { select: { name: true, pathwayNumber: true } } },
+            orderBy: { priority: "asc" },
+            take: 20,
+          },
           sections: {
             include: {
               checklistItems: {
@@ -300,12 +318,20 @@ async function executeTool(name: string, input: Record<string, unknown>, orgId: 
             orderBy: [{ severity: "asc" }],
             take: 50,
           },
-          _count: { select: { evidence: true, findings: true } },
+          _count: { select: { evidence: true, findings: true, surveyResponses: true } },
         },
       });
       if (!audit) return { error: "Audit not found" };
       const allItems = audit.sections.flatMap(s => s.checklistItems);
       const completed = allItems.filter(i => i.isCompleted).length;
+      const customFields = audit.customFields && typeof audit.customFields === "object"
+        ? audit.customFields as Record<string, unknown>
+        : null;
+      const anonymity = getReleaseStatus(
+        audit._count.surveyResponses,
+        getAnonymityThreshold(customFields),
+      );
+      const releasedResult = anonymity.released ? audit.auditResult : null;
       return {
         id: audit.id, name: audit.name, type: audit.type, status: audit.status,
         client: audit.client?.name, evidenceCount: audit._count.evidence,
@@ -317,6 +343,24 @@ async function executeTool(name: string, input: Record<string, unknown>, orgId: 
           completed: s.checklistItems.filter(i => i.isCompleted).length,
         })),
         findings: audit.findings,
+        anonymity,
+        anonymousResults: releasedResult ? {
+          overallScore: releasedResult.overallScore,
+          riskBand: releasedResult.riskBand,
+          responseCount: releasedResult.responseCount,
+          flaggedRiskTags: releasedResult.flaggedRiskTags,
+          domains: releasedResult.domainResults,
+          patternFlags: releasedResult.patternFlags,
+          recommendations: audit.recommendations.map((recommendation) => ({
+            title: recommendation.title,
+            body: recommendation.body,
+            triggerType: recommendation.triggerType,
+            pathway: recommendation.pathway,
+          })),
+        } : null,
+        privacyNotice: anonymity.released
+          ? "Only anonymous aggregate results are included. AI output requires WVW consultant review."
+          : `Results are suppressed until ${anonymity.threshold} anonymous responses are received.`,
       };
     }
 
@@ -590,6 +634,7 @@ export async function POST(req: Request) {
     if (!rl.allowed) return tooManyRequests(rl.retryAfter);
 
     const { messages, context } = await req.json();
+    const client = new OpenAI();
 
     const systemPrompt = `You are the WVW Intelligence AI command center — the expert AI assistant for WVW Consulting's full operations platform. You have real-time access to ALL organizational data through tools you can call.
 
@@ -616,8 +661,8 @@ ALWAYS use tools to get current data before answering — never guess. Call mult
 ${context ? `\nCurrent page context: ${context}` : ""}`;
 
     // Run the agentic tool-use loop
-    const allMessages: Anthropic.MessageParam[] = messages.map((m: { role: string; content: string }) => ({
-      role: m.role,
+    const input: OpenAI.Responses.ResponseInput = messages.map((m: { role: string; content: string }) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
       content: m.content,
     }));
 
@@ -626,73 +671,47 @@ ${context ? `\nCurrent page context: ${context}` : ""}`;
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          let continueLoop = true;
-          while (continueLoop) {
-            const response = await client.messages.create({
-              model: "claude-sonnet-4-6",
-              max_tokens: 4096,
-              system: systemPrompt,
+          while (true) {
+            const response = await client.responses.create({
+              model: process.env.OPENAI_MODEL ?? "gpt-5.5",
+              instructions: systemPrompt,
               tools: TOOLS,
-              messages: allMessages,
-              stream: false, // Non-streaming for tool use loop; stream final text response
+              input,
             });
 
-            if (response.stop_reason === "tool_use") {
-              // Extract text so far and tool calls
-              const textBlocks = response.content.filter(b => b.type === "text");
-              const toolUses = response.content.filter(b => b.type === "tool_use");
+            const toolCalls = response.output.filter((item) => item.type === "function_call");
+            if (toolCalls.length) {
+              input.push(...(response.output as unknown as OpenAI.Responses.ResponseInput));
+              const results = await Promise.all(toolCalls.map(async (call) => {
+                let args: Record<string, unknown> = {};
+                try { args = JSON.parse(call.arguments) as Record<string, unknown>; } catch { /* invalid args become empty */ }
+                const result = await executeTool(call.name, args, user.orgId);
+                return {
+                  type: "function_call_output" as const,
+                  call_id: call.call_id,
+                  output: JSON.stringify(result),
+                };
+              }));
+              input.push(...results);
+              continue;
+            }
 
-              // Stream any intermediate text
-              for (const tb of textBlocks) {
-                if (tb.type === "text" && tb.text) {
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: tb.text })}\n\n`));
-                }
-              }
-
-              // Add assistant's message with tool use to history
-              allMessages.push({ role: "assistant", content: response.content });
-
-              // Execute all tool calls in parallel
-              const toolResults = await Promise.all(
-                toolUses.map(async (tu) => {
-                  if (tu.type !== "tool_use") return null;
-                  const result = await executeTool(tu.name, tu.input as Record<string, unknown>, user.orgId);
-                  return {
-                    type: "tool_result" as const,
-                    tool_use_id: tu.id,
-                    content: JSON.stringify(result),
-                  };
-                })
-              );
-
-              // Add tool results to history
-              allMessages.push({
-                role: "user",
-                content: toolResults.filter(Boolean) as Anthropic.ToolResultBlockParam[],
-              });
-
-            } else {
-              // Final response — stream it
-              continueLoop = false;
-              for (const block of response.content) {
-                if (block.type === "text" && block.text) {
-                  // Stream in chunks to simulate streaming
-                  const words = block.text.split(" ");
-                  const chunkSize = 5;
-                  for (let i = 0; i < words.length; i += chunkSize) {
-                    const chunk = words.slice(i, i + chunkSize).join(" ") + (i + chunkSize < words.length ? " " : "");
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`));
-                  }
-                }
+            const words = response.output_text.split(" ");
+            const chunkSize = 5;
+            for (let i = 0; i < words.length; i += chunkSize) {
+              const chunk = words.slice(i, i + chunkSize).join(" ") + (i + chunkSize < words.length ? " " : "");
+              if (chunk) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`));
               }
             }
+            break;
           }
 
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         } catch (e) {
           console.error("[AI Chat Error]", e);
-          const isAuthError = e instanceof Error && (e.message.includes("401") || e.message.includes("authentication") || e.message.includes("invalid x-api-key"));
+          const isAuthError = e instanceof Error && (e.message.includes("401") || e.message.includes("authentication") || e.message.includes("invalid_api_key"));
           const errMsg = isAuthError
             ? "\n\n⚠️ AI service configuration error — the API key needs to be updated. Please contact your administrator."
             : "\n\nSorry, I encountered an error processing your request. Please try again.";

@@ -214,7 +214,7 @@ export default function AiBriefCard() {
             {error.isApiKey && (
               <div className="mt-2 bg-muted rounded-lg p-3 text-xs font-mono text-muted-foreground space-y-1">
                 <p>To fix — run in terminal:</p>
-                <p className="text-foreground">npx vercel env add ANTHROPIC_API_KEY production</p>
+                <p className="text-foreground">Add OPENAI_API_KEY to the production environment.</p>
                 <p className="text-foreground">npx vercel --prod</p>
               </div>
             )}

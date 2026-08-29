@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { ok, noContent, unauthorized, notFound, forbidden, serverError, badRequest } from "@/lib/api-response";
 import { logActivity } from "@/lib/activity";
-import { clientSchema } from "@/lib/validations";
+import { clientSchema, contactSchema } from "@/lib/validations";
 import { getCurrentUser } from "@/lib/auth";
 
 async function getClient(id: string, orgId: string) {
@@ -51,12 +51,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!existing) return notFound("Client");
 
     const body = await req.json();
-    const parsed = clientSchema.partial().safeParse(body);
+    const parsed = clientSchema.partial().extend({
+      primaryContact: contactSchema.partial().optional(),
+    }).safeParse(body);
     if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
 
-    const updated = await db.client.update({
-      where: { id },
-      data: parsed.data,
+    const { primaryContact, ...clientData } = parsed.data;
+    const updated = await db.$transaction(async (tx) => {
+      const client = await tx.client.update({
+        where: { id },
+        data: clientData,
+      });
+
+      if (primaryContact) {
+        const existingContact = await tx.contact.findFirst({
+          where: { clientId: id, isPrimary: true, deletedAt: null },
+          select: { id: true },
+        });
+        if (existingContact) {
+          await tx.contact.update({
+            where: { id: existingContact.id },
+            data: primaryContact,
+          });
+        } else if (primaryContact.firstName && primaryContact.lastName) {
+          await tx.contact.create({
+            data: {
+              clientId: id,
+              firstName: primaryContact.firstName,
+              lastName: primaryContact.lastName,
+              email: primaryContact.email || null,
+              phone: primaryContact.phone || null,
+              title: primaryContact.title || null,
+              department: primaryContact.department || null,
+              isPrimary: true,
+              isDecisionMaker: true,
+            },
+          });
+        }
+      }
+
+      return client;
     });
 
     await logActivity({

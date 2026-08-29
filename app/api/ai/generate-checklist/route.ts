@@ -2,10 +2,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { unauthorized, serverError, badRequest, tooManyRequests, ok } from "@/lib/api-response";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
-
-const client = new Anthropic();
 
 const schema = z.object({
   auditType:   z.string(),
@@ -148,13 +146,11 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
 Risk weights: 2.0 = critical control, 1.5 = important, 1.0 = standard, 0.5 = informational.
 Make questions specific, actionable, and verifiable. Focus on what an auditor would actually check.`;
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
+    const response = await new OpenAI().responses.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-5.5",
+      input: prompt,
     });
-
-    const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const text = response.output_text;
 
     let checklist: { sections: unknown[] };
     try {

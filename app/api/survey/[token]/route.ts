@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { ok, notFound, serverError, badRequest } from "@/lib/api-response";
 import { verifySurveyToken } from "@/lib/survey-token";
 import { z } from "zod";
+import { isAnonymousAudit } from "@/lib/audit-privacy";
+import type { Prisma } from "@prisma/client";
 
 const submitSchema = z.object({
   respondentName:  z.string().min(1).optional(),
@@ -26,7 +28,7 @@ export async function GET(
     if (!auditId) return notFound("Survey");
 
     const audit = await db.audit.findFirst({
-      where: { id: auditId },
+      where: { id: auditId, isPublicTokenActive: true, isLocked: false },
       select: {
         id: true, name: true, type: true,
         client: { select: { name: true } },
@@ -65,43 +67,49 @@ export async function POST(
     const auditId = verifySurveyToken(token);
     if (!auditId) return notFound("Survey");
 
-    const audit = await db.audit.findFirst({ where: { id: auditId }, select: { id: true } });
+    const audit = await db.audit.findFirst({
+      where: { id: auditId, isPublicTokenActive: true, isLocked: false },
+      select: { id: true, customFields: true },
+    });
     if (!audit) return notFound("Survey");
 
     const body = await req.json();
     const parsed = submitSchema.safeParse(body);
     if (!parsed.success) return badRequest("Validation failed", parsed.error.flatten());
 
-    // Check if this token was already used (allows re-submission with same token)
-    const existing = await db.surveyResponse.findUnique({ where: { token } });
+    // A survey URL is an audit invitation, not a one-person response record.
+    // Every submission must create its own anonymous response; otherwise a
+    // shared employee link overwrites the previous participant's answers.
+    const customFields = audit.customFields && typeof audit.customFields === "object"
+      ? audit.customFields as Record<string, unknown>
+      : null;
+    const anonymous = isAnonymousAudit(customFields);
 
-    if (existing) {
-      // Update existing response (allows editing before deadline)
-      await db.surveyResponse.update({
-        where: { token },
-        data: {
-          respondentName:  parsed.data.respondentName,
-          respondentEmail: parsed.data.respondentEmail,
-          respondentRole:  parsed.data.respondentRole,
-          respondentDept:  parsed.data.respondentDept,
-          responses:       parsed.data.responses,
-          notes:           parsed.data.notes,
-          submittedAt:     new Date(),
-        },
-      });
-    } else {
-      await db.surveyResponse.create({
-        data: {
-          auditId,
-          token,
-          respondentName:  parsed.data.respondentName,
-          respondentEmail: parsed.data.respondentEmail,
-          respondentRole:  parsed.data.respondentRole,
-          respondentDept:  parsed.data.respondentDept,
-          responses:       parsed.data.responses,
-          notes:           parsed.data.notes,
-        },
-      });
+    await db.surveyResponse.create({
+      data: {
+        auditId,
+        token: null,
+        respondentName:  anonymous ? null : parsed.data.respondentName,
+        respondentEmail: anonymous ? null : parsed.data.respondentEmail,
+        respondentRole:  parsed.data.respondentRole,
+        respondentDept:  parsed.data.respondentDept,
+        responses:       parsed.data.responses,
+        notes:           parsed.data.notes,
+      },
+    });
+
+    const participantId = new URL(req.url).searchParams.get("participant");
+    if (participantId) {
+      const existingFields = audit.customFields && typeof audit.customFields === "object" && !Array.isArray(audit.customFields)
+        ? audit.customFields as Record<string, unknown> : {};
+      const invites = Array.isArray(existingFields.participantInvites)
+        ? existingFields.participantInvites as Array<Record<string, unknown>> : [];
+      const index = invites.findIndex((item) => item.id === participantId);
+      if (index >= 0) {
+        const next = [...invites];
+        next[index] = { ...next[index], status: "SUBMITTED", submittedAt: new Date().toISOString() };
+        await db.audit.update({ where: { id: audit.id }, data: { customFields: { ...existingFields, participantInvites: next } as Prisma.InputJsonValue } });
+      }
     }
 
     return ok({ success: true, message: "Thank you — your responses have been recorded." });

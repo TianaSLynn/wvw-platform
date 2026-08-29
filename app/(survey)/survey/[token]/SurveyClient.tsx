@@ -42,7 +42,7 @@ function parseGuidanceHint(guidance: string | null): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-export default function SurveyClient({ survey, token }: { survey: SurveyData; token: string }) {
+export default function SurveyClient({ survey, token, participantId }: { survey: SurveyData; token: string; participantId?: string }) {
   if (survey.totalQuestions === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -86,7 +86,8 @@ export default function SurveyClient({ survey, token }: { survey: SurveyData; to
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/survey/${token}`, {
+      const query = participantId ? `?participant=${encodeURIComponent(participantId)}` : "";
+      const res = await fetch(`/api/survey/${token}${query}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

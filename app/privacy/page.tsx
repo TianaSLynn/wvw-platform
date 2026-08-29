@@ -132,7 +132,7 @@ export default function PrivacyPolicyPage() {
                   ["Clerk",    "User authentication and identity management"],
                   ["Neon",     "PostgreSQL database hosting"],
                   ["Vercel",   "Platform hosting and CDN"],
-                  ["Anthropic","AI-powered features and content generation"],
+                  ["OpenAI","AI-powered analysis, briefings, and content generation"],
                   ["Resend",   "Transactional email delivery"],
                   ["Vercel Blob","File and evidence storage"],
                 ].map(([p, pur]) => (

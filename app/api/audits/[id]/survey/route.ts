@@ -4,9 +4,10 @@
  * Auditors can share this link with client employees to collect Likert responses.
  */
 import { db } from "@/lib/db";
-import { ok, unauthorized, notFound, serverError } from "@/lib/api-response";
+import { ok, unauthorized, notFound, serverError, badRequest } from "@/lib/api-response";
 import { getCurrentUser } from "@/lib/auth";
 import { generateSurveyToken } from "@/lib/survey-token";
+import { getAnonymityThreshold, getReleaseStatus } from "@/lib/audit-privacy";
 
 export async function POST(
   req: Request,
@@ -19,9 +20,30 @@ export async function POST(
 
     const audit = await db.audit.findFirst({
       where: { id: auditId, orgId: user.orgId },
-      select: { id: true, name: true, client: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        isLocked: true,
+        customFields: true,
+        client: { select: { name: true } },
+      },
     });
     if (!audit) return notFound("Audit");
+    if (audit.isLocked) return badRequest("This audit is locked and cannot collect responses.");
+
+    await db.audit.update({
+      where: { id: audit.id },
+      data: {
+        isPublicTokenActive: true,
+        customFields: {
+          ...(audit.customFields && typeof audit.customFields === "object"
+            ? audit.customFields
+            : {}),
+          collectionStatus: "OPEN",
+          collectionOpenedAt: new Date().toISOString(),
+        },
+      },
+    });
 
     const token = generateSurveyToken(auditId);
     const origin = process.env.NEXT_PUBLIC_APP_URL
@@ -47,7 +69,7 @@ export async function GET(
 
     const audit = await db.audit.findFirst({
       where: { id: auditId, orgId: user.orgId },
-      select: { id: true },
+      select: { id: true, customFields: true },
     });
     if (!audit) return notFound("Audit");
 
@@ -55,6 +77,21 @@ export async function GET(
       where: { auditId },
       orderBy: { submittedAt: "desc" },
     });
+
+    const customFields = audit.customFields && typeof audit.customFields === "object"
+      ? audit.customFields as Record<string, unknown>
+      : null;
+    const threshold = getAnonymityThreshold(customFields);
+    const release = getReleaseStatus(responses.length, threshold);
+
+    if (!release.released) {
+      return ok({
+        totalResponses: responses.length,
+        anonymity: release,
+        responses: [],
+        averages: {},
+      });
+    }
 
     // Aggregate: per item, compute average score and count
     const aggregated: Record<string, { total: number; count: number; scores: number[] }> = {};
@@ -79,13 +116,10 @@ export async function GET(
 
     return ok({
       totalResponses: responses.length,
-      responses: responses.map((r) => ({
-        id: r.id,
-        respondentName: r.respondentName,
-        respondentRole: r.respondentRole,
-        respondentDept: r.respondentDept,
-        submittedAt: r.submittedAt,
-      })),
+      anonymity: release,
+      // Response identities are intentionally not returned with audit results.
+      // Participant support belongs in the invitation registry, not response data.
+      responses: [],
       averages,
     });
   } catch (e) { return serverError(e); }

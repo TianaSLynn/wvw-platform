@@ -81,10 +81,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const allSteps = await db.onboardingStep.findMany({ where: { workflowId } });
       const allDone = allSteps.every(s => s.status === "COMPLETED" || s.status === "SKIPPED");
       if (allDone) {
-        await db.onboardingWorkflow.update({
-          where: { id: workflowId },
-          data:  { status: "COMPLETED", completedAt: new Date() },
-        });
+        const completedAt = new Date();
+        await db.$transaction([
+          db.onboardingWorkflow.update({
+            where: { id: workflowId },
+            data:  { status: "COMPLETED", completedAt },
+          }),
+          ...(workflow.entityType === "CLIENT" && workflow.clientId
+            ? [db.client.update({ where: { id: workflow.clientId }, data: { onboardedAt: completedAt } })]
+            : []),
+        ]);
       }
     }
 

@@ -1,9 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { unauthorized, notFound, serverError } from "@/lib/api-response";
 import { db } from "@/lib/db";
-import Anthropic from "@anthropic-ai/sdk";
-
-const anthropic = new Anthropic();
+import OpenAI from "openai";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ auditId: string }> }) {
   try {
@@ -97,13 +95,11 @@ Generate a professional audit report in the following JSON structure (no markdow
   "disclaimers": ["standard audit disclaimer statements"]
 }`;
 
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
+    const response = await new OpenAI().responses.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-5.5",
+      input: prompt,
     });
-
-    const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const text = response.output_text;
     let reportNarrative: unknown;
     try {
       reportNarrative = JSON.parse(text.trim());

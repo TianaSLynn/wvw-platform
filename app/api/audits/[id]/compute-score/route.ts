@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { computeAuditScores, getRecommendedPathways } from "@/lib/scoring";
 import type { ChecklistItemMeta } from "@/lib/scoring";
+import { getAnonymityThreshold } from "@/lib/audit-privacy";
 
 export async function POST(
   _req: Request,
@@ -18,6 +19,7 @@ export async function POST(
     where: { id: auditId, orgId: user.orgId },
     select: {
       id: true,
+      customFields: true,
       sections: {
         select: {
           id: true,
@@ -77,6 +79,17 @@ export async function POST(
   const responses = rawResponses.map((r) => ({
     responses: r.responses as Record<string, string>,
   }));
+
+  const threshold = getAnonymityThreshold(
+    audit.customFields && typeof audit.customFields === "object"
+      ? audit.customFields as Record<string, unknown>
+      : null
+  );
+  if (responses.length < threshold) {
+    return badRequest(
+      `Insufficient anonymous data: ${responses.length} of ${threshold} required responses have been submitted.`
+    );
+  }
 
   // Compute scores
   const result = computeAuditScores(items, responses);
@@ -213,6 +226,7 @@ export async function POST(
     overallScore: result.overallScore,
     riskBand: result.riskBand,
     responseCount: result.responseCount,
+    anonymityThreshold: threshold,
     domainCount: result.domainScores.length,
     patternFlagCount: result.patternFlags.length,
   });
@@ -229,8 +243,14 @@ export async function GET(
   const { id: auditId } = await params;
 
   try {
+    const audit = await db.audit.findFirst({
+      where: { id: auditId, orgId: user.orgId },
+      select: { id: true },
+    });
+    if (!audit) return badRequest("Audit not found");
+
     const auditResult = await db.auditResult.findUnique({
-      where: { auditId },
+      where: { auditId: audit.id },
       include: {
         domainResults: { orderBy: { score: "asc" } },
         patternFlags: { orderBy: { avgScore: "asc" } },
@@ -240,7 +260,7 @@ export async function GET(
     if (!auditResult) return ok(null);
 
     const recommendations = await db.generatedRecommendation.findMany({
-      where: { auditId },
+      where: { auditId: audit.id },
       include: { pathway: { select: { id: true, slug: true, name: true, pathwayNumber: true } } },
       orderBy: { priority: "asc" },
     });

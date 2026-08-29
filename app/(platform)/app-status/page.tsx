@@ -36,7 +36,7 @@ function buildItems(): StatusItem[] {
   const resend  = envSet("RESEND_API_KEY");
   const n8n     = envSet("N8N_API_KEY");
   const webhook = envSet("CLERK_WEBHOOK_SECRET");
-  const anthro  = envSet("ANTHROPIC_API_KEY");
+  const openai  = envSet("OPENAI_API_KEY");
   const clerk   = envSet("CLERK_SECRET_KEY");
   const db_url  = envSet("DATABASE_URL");
   const prodUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").includes("localhost");
@@ -90,7 +90,7 @@ function buildItems(): StatusItem[] {
     // ── Infrastructure ────────────────────────────────────────────────────────
     { label: "PostgreSQL database (Neon)",          done: db_url,    critical: true,  category: "infrastructure" },
     { label: "Authentication (Clerk)",              done: clerk,     critical: true,  category: "infrastructure" },
-    { label: "AI API (Anthropic)",                  done: anthro,    critical: true,  category: "infrastructure" },
+    { label: "AI API (OpenAI)",                     done: openai,    critical: true,  category: "infrastructure" },
     { label: "File storage (Vercel Blob token)",    done: blob,      critical: true,  category: "infrastructure", note: "Add BLOB_READ_WRITE_TOKEN to env" },
     { label: "Email service (Resend API key)",      done: resend,    critical: true,  category: "infrastructure", note: "Add RESEND_API_KEY — required for invites, notifications" },
     { label: "Clerk webhook secret",               done: webhook,   critical: true,  category: "infrastructure", note: "Add CLERK_WEBHOOK_SECRET from Clerk dashboard" },

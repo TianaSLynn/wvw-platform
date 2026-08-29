@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import type { NextFetchEvent, NextRequest } from "next/server";
 
 // Routes that are publicly accessible without authentication
 const isPublicRoute = createRouteMatcher([
@@ -27,9 +28,17 @@ const isPublicRoute = createRouteMatcher([
   "/terms",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  const { userId } = await auth();
+const clerkHandler = clerkMiddleware(async (auth, req) => {
   const url = req.nextUrl;
+
+  // Token-gated participant routes do not need a Clerk session. Checking them
+  // before auth also keeps the secure survey journey available when the
+  // administrative Clerk UI is not configured in an isolated preview.
+  if (isPublicRoute(req) && url.pathname !== "/") {
+    return NextResponse.next();
+  }
+
+  const { userId } = await auth();
 
   if (!isPublicRoute(req) && !userId) {
     // Manual redirect instead of auth.protect() to avoid Clerk's
@@ -47,6 +56,23 @@ export default clerkMiddleware(async (auth, req) => {
 
   return NextResponse.next();
 });
+
+function isPreviewQaRequest(req: NextRequest): boolean {
+  return process.env.WVW_QA_PREVIEW_AUTH_ENABLED === "true"
+    && req.nextUrl.hostname.startsWith("deploy-preview-")
+    && Boolean(process.env.WVW_QA_TEST_TOKEN)
+    && req.headers.get("x-wvw-qa-token") === process.env.WVW_QA_TEST_TOKEN;
+}
+
+export default function proxy(req: NextRequest, event: NextFetchEvent) {
+  // Bypass Clerk's middleware wrapper entirely for public token-gated routes.
+  // The route handlers verify their signed survey/invitation tokens directly.
+  if (isPublicRoute(req) && req.nextUrl.pathname !== "/") {
+    return NextResponse.next();
+  }
+  if (isPreviewQaRequest(req)) return NextResponse.next();
+  return clerkHandler(req, event);
+}
 
 export const config = {
   matcher: [
