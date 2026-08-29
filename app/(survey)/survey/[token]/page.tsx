@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
-import { verifySurveyToken } from "@/lib/survey-token";
+import { verifySurveyTokenDetails } from "@/lib/survey-token";
 import { db } from "@/lib/db";
 import SurveyClient from "./SurveyClient";
 import type { Prisma } from "@prisma/client";
+import { isAnonymousAudit } from "@/lib/audit-privacy";
 
 export default async function SurveyPage({
   params,
@@ -12,10 +13,10 @@ export default async function SurveyPage({
   searchParams: Promise<{ participant?: string }>;
 }) {
   const { token } = await params;
-  const { participant } = await searchParams;
-
-  const auditId = verifySurveyToken(token);
-  if (!auditId) notFound();
+  await searchParams;
+  const tokenDetails = verifySurveyTokenDetails(token);
+  if (!tokenDetails) notFound();
+  const { auditId, participantId } = tokenDetails;
 
   const audit = await db.audit.findFirst({
     where: { id: auditId, isPublicTokenActive: true, isLocked: false },
@@ -41,12 +42,12 @@ export default async function SurveyPage({
 
   if (!audit) notFound();
 
-  if (participant) {
+  if (participantId) {
     const customFields = audit.customFields && typeof audit.customFields === "object" && !Array.isArray(audit.customFields)
       ? audit.customFields as Record<string, unknown> : {};
     const invites = Array.isArray(customFields.participantInvites)
       ? customFields.participantInvites as Array<Record<string, unknown>> : [];
-    const index = invites.findIndex((item) => item.id === participant);
+    const index = invites.findIndex((item) => item.id === participantId);
     if (index >= 0 && invites[index]?.status === "INVITED") {
       const next = [...invites];
       next[index] = { ...next[index], status: "OPENED", openedAt: new Date().toISOString() };
@@ -63,10 +64,11 @@ export default async function SurveyPage({
       name: audit.name,
       org: audit.org.name,
       client: audit.client?.name ?? null,
+      anonymous: isAnonymousAudit(audit.customFields && typeof audit.customFields === "object" ? audit.customFields as Record<string, unknown> : null),
     },
     sections,
     totalQuestions,
   };
 
-  return <SurveyClient survey={survey} token={token} participantId={participant} />;
+  return <SurveyClient survey={survey} token={token} />;
 }
