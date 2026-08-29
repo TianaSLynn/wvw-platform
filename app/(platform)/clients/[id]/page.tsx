@@ -13,8 +13,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: client?.name ?? "Client" };
 }
 
-export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClientDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ setupWarning?: string }>;
+}) {
   const { id } = await params;
+  const { setupWarning } = await searchParams;
   const user = await requireUser();
 
   const client = await db.client.findFirst({
@@ -64,6 +71,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         totalBilled={totalBilled}
         openBalance={openBalance}
         currentUserId={user.id}
+        setupWarning={setupWarning}
       />
     </div>
   );
