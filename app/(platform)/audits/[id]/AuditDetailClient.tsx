@@ -1539,7 +1539,7 @@ function ResultsTab({ auditId }: { auditId: string }) {
               href={`/api/audits/${auditId}/research-export`}
               className="btn-ghost text-xs inline-flex items-center gap-1"
             >
-              <Download size={11} /> Download Anonymous Research CSV
+              <Download size={11} /> Download Anonymous Research Workbook
             </a>
           </div>
         </div>
