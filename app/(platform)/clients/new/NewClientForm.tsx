@@ -61,7 +61,10 @@ export default function NewClientForm() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to create client account");
-      router.push(`/clients/${body.data.client.id}?created=1`);
+      const warnings = Array.isArray(body.data.warnings) ? body.data.warnings as string[] : [];
+      const params = new URLSearchParams({ created: "1" });
+      if (warnings.length) params.set("setupWarning", warnings.join(" "));
+      router.push(`/clients/${body.data.client.id}?${params.toString()}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setIsSubmitting(false);
