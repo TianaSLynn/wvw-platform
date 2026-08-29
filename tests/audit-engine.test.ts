@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   getAnonymityThreshold,
   getReleaseStatus,
+  getCollectionGateStatus,
 } from "../lib/audit-privacy";
 import {
   computeAuditScores,
@@ -25,6 +26,22 @@ test("anonymity threshold never falls below five", () => {
     responsesNeeded: 1,
   });
   assert.equal(getReleaseStatus(5, 5).released, true);
+});
+
+test("collection cannot open before protection gates pass", () => {
+  assert.equal(getCollectionGateStatus(0, []).ready, false);
+  const steps = Array.from({ length: 9 }, (_, index) => ({
+    title: `Step ${index + 1}`,
+    sortOrder: index + 1,
+    status: "COMPLETED",
+    documentRequired: index === 2,
+    documentCollected: index !== 2,
+  }));
+  assert.match(getCollectionGateStatus(21, steps).reason ?? "", /required document/i);
+  steps[2]!.documentCollected = true;
+  assert.equal(getCollectionGateStatus(21, steps).ready, true);
+  steps[7]!.status = "PENDING";
+  assert.match(getCollectionGateStatus(21, steps).reason ?? "", /Step 8/);
 });
 
 test("Likert scoring and reverse scoring are correct", () => {
