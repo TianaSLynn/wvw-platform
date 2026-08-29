@@ -31,9 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (index < 0) return notFound("Participant");
     const existing = list[index]!;
     const now = new Date().toISOString();
-    const updated: AuditParticipantInvite = parsed.data.action === "resend"
-      ? { ...existing, status: existing.status === "SUBMITTED" ? "SUBMITTED" : "INVITED", inviteCount: existing.inviteCount + 1, sentAt: existing.sentAt || now, lastSentAt: now }
-      : parsed.data.action === "support"
+    let updated: AuditParticipantInvite = parsed.data.action === "support"
         ? {
             ...existing,
             status: "NEEDS_SUPPORT",
@@ -42,16 +40,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               : existing.status,
             supportNotes: parsed.data.supportNotes ?? "",
           }
-        : { ...existing, status: existing.statusBeforeSupport ?? "READY", statusBeforeSupport: undefined, supportNotes: undefined };
-    const next = [...list]; next[index] = updated;
-    await db.audit.update({ where: { id: audit.id }, data: { customFields: { ...fields(audit.customFields), participantInvites: next } } });
+        : parsed.data.action === "clear-support"
+          ? { ...existing, status: existing.statusBeforeSupport ?? "READY", statusBeforeSupport: undefined, supportNotes: undefined }
+          : existing;
     if (parsed.data.action === "resend") {
       const token = generateSurveyToken(audit.id);
       const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
       const surveyUrl = `${origin}/survey/${token}?participant=${encodeURIComponent(existing.id)}`;
       const sent = await sendAuditParticipantInvitation({ to: existing.email, name: existing.name, clientName: audit.client.name, auditName: audit.name, surveyUrl });
       if (!sent.ok) return badRequest("The invitation email could not be resent.");
+      updated = {
+        ...existing,
+        status: existing.status === "SUBMITTED" ? "SUBMITTED" : "INVITED",
+        inviteCount: existing.inviteCount + 1,
+        sentAt: existing.sentAt || now,
+        lastSentAt: now,
+      };
     }
+    const next = [...list]; next[index] = updated;
+    await db.audit.update({ where: { id: audit.id }, data: { customFields: { ...fields(audit.customFields), participantInvites: next } } });
     return ok(updated);
   } catch (error) { return serverError(error); }
 }
