@@ -50,6 +50,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
     if (!current) return notFound("Onboarding step");
 
+    if (status === "COMPLETED" && current.documentRequired && !current.documentCollected && documentCollected !== true) {
+      return badRequest(`Record the required document for "${current.title}" before completing this step.`);
+    }
+
     // Prevent completing a blocked step
     if (status === "COMPLETED" || status === "IN_PROGRESS") {
       if (current?.blockedByStep && current.blockedByStep.status !== "COMPLETED" && current.blockedByStep.status !== "SKIPPED") {
