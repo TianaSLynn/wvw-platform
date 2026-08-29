@@ -73,19 +73,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       name: parsed.data.name,
       email: parsed.data.email.toLowerCase(),
       group: parsed.data.group,
-      status: parsed.data.sendNow ? "INVITED" : "READY",
-      inviteCount: parsed.data.sendNow ? 1 : 0,
-      sentAt: parsed.data.sendNow ? now : "",
-      lastSentAt: parsed.data.sendNow ? now : "",
+      status: "READY",
+      inviteCount: 0,
+      sentAt: "",
+      lastSentAt: "",
     };
     const token = generateSurveyToken(audit.id);
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
     const surveyUrl = `${origin}/survey/${token}?participant=${encodeURIComponent(participant.id)}`;
 
-    await db.audit.update({
-      where: { id: audit.id },
-      data: { customFields: { ...fields(audit.customFields), participantInvites: [...current, participant] } },
-    });
+    let savedParticipant = participant;
     if (parsed.data.sendNow) {
       const sent = await sendAuditParticipantInvitation({
         to: participant.email,
@@ -94,9 +91,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         auditName: audit.name,
         surveyUrl,
       });
-      if (!sent.ok) return badRequest("Participant was added, but the invitation email could not be sent.");
+      if (!sent.ok) return badRequest("The invitation email could not be sent. The participant was not added; try again or add them without sending.");
+      savedParticipant = {
+        ...participant,
+        status: "INVITED",
+        inviteCount: 1,
+        sentAt: now,
+        lastSentAt: now,
+      };
     }
 
-    return created({ participant, surveyUrl });
+    await db.audit.update({
+      where: { id: audit.id },
+      data: { customFields: { ...fields(audit.customFields), participantInvites: [...current, savedParticipant] } },
+    });
+
+    return created({ participant: savedParticipant, surveyUrl });
   } catch (error) { return serverError(error); }
 }
