@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -183,15 +184,33 @@ export default function ClientDetail({ client, totalBilled, openBalance, setupWa
 }
 
 function OnboardingTab({ client }: { client: Props["client"] }) {
+  const router = useRouter();
   const workflow = client.onboardingWorkflows[0];
+  const [updatingStep, setUpdatingStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   if (!workflow) {
     return <div className="bg-card rounded-xl border border-border p-8 text-center"><h3 className="font-semibold">No client onboarding workflow</h3><p className="mt-1 text-sm text-muted-foreground">This client was created before automatic onboarding was connected. Start or repair onboarding before launching the audit.</p></div>;
   }
 
   const completed = workflow.steps.filter((step) => step.status === "COMPLETED" || step.status === "SKIPPED").length;
   const percent = workflow.steps.length ? Math.round((completed / workflow.steps.length) * 100) : 0;
+  const workflowId = workflow.id;
+  async function updateStep(stepId: string, status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED") {
+    setUpdatingStep(stepId);
+    setError(null);
+    const response = await fetch(`/api/onboarding/${workflowId}/steps`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stepId, status }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) setError(body?.error ?? "The onboarding step could not be updated.");
+    else router.refresh();
+    setUpdatingStep(null);
+  }
   return (
     <div className="space-y-4">
+      {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>}
       <div className="bg-card rounded-xl border border-border p-5 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold">Onboarding progress</h2><p className="text-xs text-muted-foreground">{completed} of {workflow.steps.length} steps complete</p></div><span className="text-2xl font-bold text-gold">{percent}%</span></div>
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gold" style={{ width: `${percent}%` }} /></div>
@@ -201,6 +220,12 @@ function OnboardingTab({ client }: { client: Props["client"] }) {
           <div key={step.id} className="flex items-start gap-3 p-4">
             <div className={`mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${step.status === "COMPLETED" ? "bg-green-500/15 text-green-600" : step.status === "BLOCKED" ? "bg-muted text-muted-foreground" : "bg-gold/15 text-gold"}`}>{step.sortOrder}</div>
             <div className="min-w-0 flex-1"><p className="text-sm font-medium">{step.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{step.status.replaceAll("_", " ")}{step.documentRequired ? ` · ${step.documentCollected ? "Document received" : "Document needed"}` : ""}</p></div>
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {step.status === "PENDING" && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "IN_PROGRESS")} className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50">Start</button>}
+              {(step.status === "PENDING" || step.status === "IN_PROGRESS") && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "COMPLETED")} className="rounded-md bg-green-600 px-2 py-1 text-[11px] text-white disabled:opacity-50">Complete</button>}
+              {(step.status === "PENDING" || step.status === "IN_PROGRESS") && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "SKIPPED")} className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50">Skip</button>}
+              {(step.status === "COMPLETED" || step.status === "SKIPPED") && <button disabled={updatingStep === step.id} onClick={() => updateStep(step.id, "PENDING")} className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-muted disabled:opacity-50">Reopen</button>}
+            </div>
           </div>
         ))}
       </div>
