@@ -14,6 +14,17 @@ export function isAnonymousAudit(customFields: AuditCustomFields): boolean {
   return customFields?.anonymousCollection !== false;
 }
 
+export function getPrivacyConfigurationStatus(customFields: AuditCustomFields) {
+  const responseRetentionDays = Number(customFields?.responseRetentionDays);
+  const evidenceRetentionDays = Number(customFields?.evidenceRetentionDays);
+  const deletionPolicy = customFields?.deletionPolicy;
+  const validPolicy = ["DELETE_AFTER_RETENTION", "ANONYMIZE_AFTER_RETENTION", "LEGAL_HOLD_OVERRIDE"].includes(String(deletionPolicy));
+  const ready = Number.isInteger(responseRetentionDays) && responseRetentionDays >= 30
+    && Number.isInteger(evidenceRetentionDays) && evidenceRetentionDays >= 30
+    && validPolicy;
+  return { ready, responseRetentionDays: ready ? responseRetentionDays : null, evidenceRetentionDays: ready ? evidenceRetentionDays : null, deletionPolicy: validPolicy ? String(deletionPolicy) : null };
+}
+
 export function getReleaseStatus(responseCount: number, threshold: number) {
   return {
     released: responseCount >= threshold,
