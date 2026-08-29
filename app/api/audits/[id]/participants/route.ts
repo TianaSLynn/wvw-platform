@@ -78,9 +78,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       sentAt: "",
       lastSentAt: "",
     };
-    const token = generateSurveyToken(audit.id);
+    const token = generateSurveyToken(audit.id, participant.id);
     const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-    const surveyUrl = `${origin}/survey/${token}?participant=${encodeURIComponent(participant.id)}`;
+    const surveyUrl = `${origin}/survey/${token}`;
 
     let savedParticipant = participant;
     if (parsed.data.sendNow) {
