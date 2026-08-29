@@ -1,10 +1,8 @@
 import { getCurrentUser } from "@/lib/auth";
 import { unauthorized, serverError, badRequest, tooManyRequests } from "@/lib/api-response";
 import { rateLimit, rateLimitKey } from "@/lib/rate-limit";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
-
-const client = new Anthropic();
 
 const schema = z.object({
   findingTitle:    z.string(),
@@ -55,13 +53,11 @@ Provide a structured analysis. Respond ONLY with valid JSON (no markdown):
 
 Risk score should be 0-100 based on severity and likelihood combination.`;
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
+    const response = await new OpenAI().responses.create({
+      model: process.env.OPENAI_MODEL ?? "gpt-5.5",
+      input: prompt,
     });
-
-    const text = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const text = response.output_text;
 
     let analysis: unknown;
     try {
