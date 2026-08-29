@@ -44,12 +44,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { stepId, status, notes, dueDate, assignedToId, documentCollected, documentNote } = parsed.data;
 
+    const current = await db.onboardingStep.findFirst({
+      where: { id: stepId, workflowId },
+      include: { blockedByStep: true },
+    });
+    if (!current) return notFound("Onboarding step");
+
     // Prevent completing a blocked step
     if (status === "COMPLETED" || status === "IN_PROGRESS") {
-      const current = await db.onboardingStep.findUnique({
-        where: { id: stepId },
-        include: { blockedByStep: true },
-      });
       if (current?.blockedByStep && current.blockedByStep.status !== "COMPLETED" && current.blockedByStep.status !== "SKIPPED") {
         return badRequest(`This step is blocked by "${current.blockedByStep.title}" — complete that step first.`);
       }
@@ -92,6 +94,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             : []),
         ]);
       }
+    } else if (status === "PENDING" || status === "IN_PROGRESS") {
+      await db.$transaction([
+        db.onboardingWorkflow.update({
+          where: { id: workflowId },
+          data: { status: "IN_PROGRESS", completedAt: null },
+        }),
+        ...(workflow.entityType === "CLIENT" && workflow.clientId
+          ? [db.client.update({ where: { id: workflow.clientId }, data: { onboardedAt: null } })]
+          : []),
+      ]);
     }
 
     return ok(step);
