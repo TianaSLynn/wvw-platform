@@ -14,7 +14,7 @@ const AI_ENGINES = [
     icon: Shield,
     color: "text-red-500",
     bg: "bg-red-500/10 border-red-500/20",
-    model: "claude-sonnet-4-6",
+    model: "gpt-5.5",
     uses: "Audits, Findings",
     callsToday: 142,
     accuracy: 94,
@@ -26,7 +26,7 @@ const AI_ENGINES = [
     icon: FileText,
     color: "text-blue-500",
     bg: "bg-blue-500/10 border-blue-500/20",
-    model: "claude-opus-4-6",
+    model: "gpt-5.5",
     uses: "Reports",
     callsToday: 28,
     accuracy: 97,
@@ -38,7 +38,7 @@ const AI_ENGINES = [
     icon: TrendingUp,
     color: "text-amber-500",
     bg: "bg-amber-500/10 border-amber-500/20",
-    model: "claude-haiku-4-5",
+    model: "gpt-5.5",
     uses: "Financials, Dashboard",
     callsToday: 389,
     accuracy: 91,
@@ -50,7 +50,7 @@ const AI_ENGINES = [
     icon: Search,
     color: "text-purple-500",
     bg: "bg-purple-500/10 border-purple-500/20",
-    model: "claude-sonnet-4-6",
+    model: "gpt-5.5",
     uses: "Evidence Vault",
     callsToday: 67,
     accuracy: 89,
@@ -62,7 +62,7 @@ const AI_ENGINES = [
     icon: Zap,
     color: "text-green-500",
     bg: "bg-green-500/10 border-green-500/20",
-    model: "claude-sonnet-4-6",
+    model: "gpt-5.5",
     uses: "Recommendations",
     callsToday: 53,
     accuracy: 93,
@@ -74,7 +74,7 @@ const AI_ENGINES = [
     icon: Brain,
     color: "text-gold",
     bg: "bg-gold/10 border-gold/20",
-    model: "claude-opus-4-6",
+    model: "gpt-5.5",
     uses: "Platform-wide",
     callsToday: 201,
     accuracy: 96,
@@ -164,7 +164,7 @@ export default async function AIEnginesPage() {
         <div className="flex items-start gap-2">
           <AlertCircle size={14} className="text-muted-foreground mt-0.5 flex-shrink-0" />
           <p className="text-xs text-muted-foreground">
-            All AI engines use Anthropic Claude models. Set your <span className="text-foreground font-medium">ANTHROPIC_API_KEY</span> in environment variables to enable live AI features.
+            All AI engines use OpenAI models. Set <span className="text-foreground font-medium">OPENAI_API_KEY</span> in environment variables to enable live AI features.
           </p>
         </div>
       </div>
