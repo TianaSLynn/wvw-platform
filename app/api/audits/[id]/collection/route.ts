@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { ok, unauthorized, notFound, badRequest, serverError } from "@/lib/api-response";
 import { logActivity } from "@/lib/activity";
-import { getCollectionGateStatus } from "@/lib/audit-privacy";
+import { getCollectionGateStatus, getPrivacyConfigurationStatus } from "@/lib/audit-privacy";
 
 const schema = z.object({ action: z.enum(["open", "pause", "close"]) });
 
@@ -35,6 +35,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ? audit.customFields as Record<string, unknown> : {};
     const now = new Date().toISOString();
     if (parsed.data.action === "open") {
+      const privacy = getPrivacyConfigurationStatus(existingFields);
+      if (!privacy.ready) return badRequest("Collection cannot open until response retention, evidence retention, and deletion treatment are configured.");
       const questionCount = audit.sections.reduce((sum, section) => sum + section._count.checklistItems, 0);
       const onboarding = audit.client.onboardingWorkflows[0];
       const gate = getCollectionGateStatus(questionCount, onboarding?.steps);
