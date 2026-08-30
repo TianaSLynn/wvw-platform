@@ -1,0 +1,84 @@
+/**
+ * Session lookup against MHFA-01 | Training Sessions -- the database the
+ * LIVE registration form actually links to (not TRAIN-03, a separate,
+ * disconnected "TRAIN OS" system with its own Sessions database -- see
+ * docs/DECISION_REGISTER.md Decision 8). Confirmed live schema 2026-08-11:
+ * "Session Code" (title), "Course Name" (plain text), "Start Date"/"Start
+ * Time" (Start Time is a plain text field, not part of the date object),
+ * "Time Zone" (select: ET/CT/MT/PT/AKT/HT), "Delivery Format" (select).
+ */
+import { queryDatabaseLegacy, titleFilter, getPage, NotionApiError } from "./client.js";
+
+const MHFA_01_DATABASE_ID = "89649428-f379-405d-a66f-b9215d757b42";
+
+const TIME_ZONE_IANA_MAP: Record<string, string> = {
+  ET: "America/New_York",
+  CT: "America/Chicago",
+  MT: "America/Denver",
+  PT: "America/Los_Angeles",
+  AKT: "America/Anchorage",
+  HT: "Pacific/Honolulu",
+};
+
+export interface Mhfa01Session {
+  pageId: string;
+  sessionId?: number; // auto_increment_id
+  sessionCode: string;
+  courseName?: string;
+  startDate?: string; // ISO date, e.g. "2026-09-15"
+  startTime?: string; // as stored, e.g. "10:00 AM"
+  timeZoneAbbreviation?: string; // "ET", "CT", etc.
+  timeZoneIana?: string; // "America/New_York", derived -- undefined if abbreviation isn't a known mapping
+  deliveryFormat?: string;
+  location?: string;
+  teamsLink?: string;
+  zoomLink?: string;
+}
+
+/** Best-effort "where to show up" string -- real fields only, no invented default. */
+export function derivePlatformOrLocation(session: Mhfa01Session): string | undefined {
+  if (session.deliveryFormat === "Virtual") {
+    return session.teamsLink || session.zoomLink || undefined;
+  }
+  return session.location || session.teamsLink || session.zoomLink || undefined;
+}
+
+function mapSessionProperties(pageId: string, props: Record<string, any>, fallbackSessionCode?: string): Mhfa01Session {
+  const timeZoneAbbreviation = props["Time Zone"]?.select?.name as string | undefined;
+  return {
+    pageId,
+    sessionId: props["Session ID"]?.unique_id?.number ?? props["Session ID"]?.number,
+    sessionCode: props["Session Code"]?.title?.[0]?.plain_text ?? fallbackSessionCode ?? "",
+    courseName: props["Course Name"]?.rich_text?.[0]?.plain_text,
+    startDate: props["Start Date"]?.date?.start,
+    startTime: props["Start Time"]?.rich_text?.[0]?.plain_text,
+    timeZoneAbbreviation,
+    timeZoneIana: timeZoneAbbreviation ? TIME_ZONE_IANA_MAP[timeZoneAbbreviation] : undefined,
+    deliveryFormat: props["Delivery Format"]?.select?.name,
+    location: props["Location"]?.rich_text?.[0]?.plain_text,
+    teamsLink: props["Teams/Virtual Link"]?.url,
+    zoomLink: props["Zoom Link"]?.url,
+  };
+}
+
+/** Search-before-create governance: find the real session a form's `selected-session` value refers to. Returns null (not an error) if no match -- caller decides how to handle a genuinely missing session. */
+export async function findSessionByCode(sessionCode: string): Promise<Mhfa01Session | null> {
+  const result = await queryDatabaseLegacy(MHFA_01_DATABASE_ID, titleFilter("Session Code", sessionCode));
+  if (result.results.length === 0) return null;
+
+  const page = result.results[0];
+  return mapSessionProperties(page.id, page.properties as Record<string, any>, sessionCode);
+}
+
+/** For callers that already hold a resolved MHFA-01 page id (e.g. a registration's own "Session" relation) rather than a code to search by. Returns null on any not-found/access error rather than throwing, matching findSessionByCode's contract. */
+export async function findSessionByPageId(pageId: string): Promise<Mhfa01Session | null> {
+  try {
+    const page = await getPage(pageId);
+    return mapSessionProperties(page.id, page.properties as Record<string, any>);
+  } catch (err) {
+    if (err instanceof NotionApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export { NotionApiError };

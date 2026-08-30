@@ -28,6 +28,29 @@ import {
   mhfaPreworkSupportSchema,
   mhfaPaymentReconciliationSchema,
 } from "../../packages/validation/src/mhfa-postwork.schema.js";
+import {
+  formMhfa001Schema,
+  assertRequiredAcknowledgments as assertFormMhfa001Acknowledgments,
+} from "../../packages/validation/src/form-mhfa-001.schema.js";
+import {
+  formMhfa002Schema,
+  assertRequiredAcknowledgments as assertFormMhfa002Acknowledgments,
+} from "../../packages/validation/src/form-mhfa-002.schema.js";
+import { createPage, updatePage, NotionNotConfiguredError, NotionApiError } from "../../packages/integration-notion/src/client.js";
+import {
+  namedRegistrationFormToHubRegistration,
+  formMhfa001ToHubRegistration,
+  registrationToNotionProperties,
+  registrationSnapshotToNotionProperties,
+} from "../../packages/integration-notion/src/mappers.js";
+import { createGroupOpportunity, type GroupOpportunityResult } from "../../packages/integration-notion/src/group-opportunity.js";
+import { logWorkflowExecution } from "../../packages/integration-postgres/src/workflow-log.js";
+import { sendRegistrationAlert } from "../../packages/integration-email/src/registration-alert.js";
+import { computeSeatRequestPlan, sendSeatRequestReceivedEmail } from "../../packages/integration-email/src/registration-confirmation.js";
+import { recordException } from "../../packages/integration-notion/src/exception-recorder-orchestration.js";
+
+// MHFA-02 | Learners & Registrations, confirmed live 2026-08-03 (docs/NOTION_MAPPING.md).
+const MHFA_02_DATABASE_ID = "790b794d-fa82-40eb-beb1-b24be9d0ef01";
 
 /**
  * POST /.netlify/functions/intake
@@ -50,6 +73,30 @@ interface FormHandlerResult {
   featureFlag: string;
   hasRestrictedData: boolean;
   generalPayload: Record<string, unknown>;
+  /**
+   * When present, this path can write a real Notion record once its feature
+   * flag is on and NOTION_API_KEY is configured. Absent = validation/dry-run
+   * only, same as every other path today.
+   */
+  notionRegistration?: (correlationId: string) => ReturnType<typeof namedRegistrationFormToHubRegistration>;
+  /**
+   * MHFA-COMM-001 (Seat Request Received) needs the learner's name/email
+   * and their raw selected-session value -- the two live individual
+   * registration forms use different field names for the same concept
+   * ("selected-session" vs "session-choice"), so each handler below
+   * supplies this in its own shape rather than intake.ts guessing which
+   * field name applies.
+   */
+  seatConfirmationInput?: { firstName: string; preferredName?: string; email: string; selectedSessionCode: string };
+  /**
+   * MHFA-GRP-01 only: unlike notionRegistration (one synchronous mapping +
+   * one createPage call in the shared flow below), a group/private
+   * opportunity needs multiple Notion lookups/writes (find-or-create
+   * Organization, find-or-create Contact, then create Opportunity), so it
+   * owns its own async orchestration instead of fitting the single-createPage
+   * shape.
+   */
+  groupOpportunityWrite?: (correlationId: string) => Promise<GroupOpportunityResult>;
 }
 
 type FormHandler = (body: Record<string, unknown>) => { ok: true; result: FormHandlerResult } | { ok: false; status: number; body: unknown };
@@ -73,6 +120,63 @@ const FORM_HANDLERS: Record<string, FormHandler> = {
         featureFlag: "MHFA_REG_01_ENABLED",
         hasRestrictedData: Object.keys(restricted).length > 0,
         generalPayload: general,
+        notionRegistration: (correlationId) => namedRegistrationFormToHubRegistration(parsed.data, correlationId),
+        seatConfirmationInput: {
+          firstName: parsed.data["first-name"],
+          preferredName: parsed.data["preferred-name"],
+          email: parsed.data["email"],
+          selectedSessionCode: parsed.data["selected-session"],
+        },
+      },
+    };
+  },
+
+  "FORM-MHFA-001": (body) => {
+    const parsed = formMhfa001Schema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    const missing = assertFormMhfa001Acknowledgments(parsed.data);
+    if (missing.length > 0) {
+      return { ok: false, status: 422, body: { error: "missing_required_acknowledgments", fields: missing } };
+    }
+
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-REG-01",
+        featureFlag: "MHFA_REG_01_ENABLED",
+        hasRestrictedData: false,
+        generalPayload: parsed.data,
+        notionRegistration: (correlationId) => formMhfa001ToHubRegistration(parsed.data, correlationId),
+        seatConfirmationInput: {
+          firstName: parsed.data["first-name"],
+          preferredName: parsed.data["preferred-name"],
+          email: parsed.data["email"],
+          selectedSessionCode: parsed.data["session-choice"],
+        },
+      },
+    };
+  },
+
+  "FORM-MHFA-002": (body) => {
+    const parsed = formMhfa002Schema.safeParse(body);
+    if (!parsed.success) return { ok: false, status: 422, body: { error: "validation_failed", issues: parsed.error.issues } };
+
+    const missing = assertFormMhfa002Acknowledgments(parsed.data);
+    if (missing.length > 0) {
+      return { ok: false, status: 422, body: { error: "missing_required_acknowledgments", fields: missing } };
+    }
+
+    return {
+      ok: true,
+      result: {
+        domain: "MHFA",
+        automationCode: "MHFA-GRP-01",
+        featureFlag: "MHFA_GRP_01_ENABLED",
+        hasRestrictedData: false,
+        generalPayload: parsed.data,
+        groupOpportunityWrite: (correlationId) => createGroupOpportunity(parsed.data, correlationId),
       },
     };
   },
@@ -235,27 +339,313 @@ export const handler: Handler = async (event: HandlerEvent) => {
     return json(outcome.status, outcome.body);
   }
 
-  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload } = outcome.result;
+  const { domain, automationCode, featureFlag, hasRestrictedData, generalPayload, notionRegistration, groupOpportunityWrite, seatConfirmationInput } = outcome.result;
   const featureEnabled = process.env[featureFlag] === "true";
   const correlationId = generateCorrelationId(domain, automationCode);
   const payloadHash = canonicalPayloadHash(generalPayload);
 
-  // No persistence layer is wired up: both candidate Supabase projects are
-  // paused pending approval (docs/DECISION_REGISTER.md, Decision 6). This
-  // function is intentionally honest about that rather than claiming a write
-  // that didn't happen (governance: "Do not represent mock data as production data").
+  // Notion remains the system of record for this hub (ADR-003). "persisted"
+  // here reflects whether a real Notion write happened for THIS response,
+  // not whether a workflow_executions audit-log row was also written --
+  // that's a separate, best-effort side effect (see logWorkflowExecution
+  // calls below), gated on its own flag, and never changes this value.
   const persisted = false;
 
+  if (!featureEnabled) {
+    return json(200, {
+      status: "dry_run_feature_disabled",
+      automationCode,
+      correlationId,
+      payloadHash,
+      hasRestrictedData,
+      persisted,
+      note: `${featureFlag} is not set. This is a validation-only dry run; no automation was triggered.`,
+    });
+  }
+
+  // Feature is on. If this path has a Notion mapping, attempt a real write
+  // and report exactly what happened -- never a bare "validated" status that
+  // could be mistaken for "tracked."
+  if (notionRegistration) {
+    try {
+      const registration = notionRegistration(correlationId);
+
+      // Step 1-2 of Tiána's required workflow (Decision 10): retrieve
+      // session, calculate deadline and price, BEFORE the registration
+      // write, so the computed values can be saved onto the record itself
+      // rather than existing only during email generation.
+      const commEnabled = Boolean(seatConfirmationInput) && process.env.MHFA_COMM_001_ENABLED === "true";
+      const planResult = commEnabled ? await computeSeatRequestPlan(seatConfirmationInput!) : undefined;
+      if (planResult?.ok) {
+        registration.sessionPageId = planResult.plan.session.pageId;
+        registration.amountDue = planResult.plan.amountDueUsd;
+        registration.paymentDeadline = planResult.plan.paymentDeadline;
+      }
+
+      const page = await createPage(MHFA_02_DATABASE_ID, registrationToNotionProperties(registration));
+
+      // Step 4 (partial): save the new snapshot fields Tiána approved
+      // 2026-08-12. Separate, best-effort call -- these properties don't
+      // exist on the live MHFA-02 schema until she adds them manually
+      // (Notion 400s on unknown properties), so this must never be able to
+      // break the real registration write above.
+      if (planResult?.ok) {
+        try {
+          const { plan } = planResult;
+          await updatePage(
+            page.id,
+            registrationSnapshotToNotionProperties({
+              sessionIdSnapshot: plan.session.sessionId !== undefined ? String(plan.session.sessionId) : undefined,
+              sessionDateTimeSnapshot: [plan.session.startDate, plan.session.startTime].filter(Boolean).join(" ") || undefined,
+              sessionTimezoneSnapshot: plan.session.timeZoneAbbreviation,
+              courseNameSnapshot: plan.session.courseName,
+              paymentUrl: plan.paymentUrl,
+              registrationReference: plan.registrationReference,
+              pricingRuleApplied: plan.pricingRuleApplied,
+              valuesCalculatedAt: plan.calculatedAt,
+              communicationVersion: plan.communicationVersion,
+            })
+          );
+        } catch (snapshotErr) {
+          console.error("[intake] MHFA-02 snapshot write-back failed (new fields likely not added yet -- see Decision 10):", snapshotErr);
+        }
+      }
+
+      await logWorkflowExecution({
+        correlationId,
+        automationCode,
+        status: "completed",
+        trigger: formName,
+        inputSnapshot: generalPayload,
+        outputSnapshot: { notionPageId: page.id, notionPageUrl: page.url },
+      });
+      await sendRegistrationAlert({
+        automationCode,
+        correlationId,
+        notionPageUrl: page.url,
+        generalPayload,
+      });
+
+      if (commEnabled && planResult) {
+        if (planResult.ok) {
+          try {
+            const confirmation = await sendSeatRequestReceivedEmail(seatConfirmationInput!, planResult.plan);
+            await logWorkflowExecution({
+              correlationId,
+              automationCode: "MHFA-COMM-001",
+              status: confirmation.sent ? "completed" : "completed_with_warning",
+              trigger: formName,
+              outputSnapshot: confirmation,
+              errorSummary: confirmation.sent ? undefined : confirmation.detail,
+            });
+            // Per Tiána (Decision 10): "If any required value cannot be
+            // saved or validated, stop the send and create a high-priority
+            // exception." MHFA-05 is the real, live equivalent of the
+            // TRAIN-18 queue she referenced -- see Decision 8.
+            if (!confirmation.sent) {
+              await recordException({
+                correlationId,
+                workflowCode: "WF-REG",
+                exceptionType: "Email Failure",
+                severity: "High",
+                errorDetail: confirmation.detail,
+                registrationPageId: page.id,
+                sessionPageId: planResult.plan.session.pageId,
+              });
+            }
+          } catch (confirmationErr) {
+            // Best-effort, same as sendRegistrationAlert -- never fail the
+            // real registration response over the confirmation email.
+            console.error("[intake] MHFA-COMM-001 send failed unexpectedly:", confirmationErr);
+          }
+        } else {
+          // Session lookup itself failed -- same "stop and create a
+          // high-priority exception" rule applies.
+          await logWorkflowExecution({
+            correlationId,
+            automationCode: "MHFA-COMM-001",
+            status: "completed_with_warning",
+            trigger: formName,
+            errorSummary: planResult.detail,
+          });
+          try {
+            await recordException({
+              correlationId,
+              workflowCode: "WF-REG",
+              exceptionType: "Email Failure",
+              severity: "High",
+              errorDetail: planResult.detail,
+              registrationPageId: page.id,
+            });
+          } catch (exceptionErr) {
+            console.error("[intake] failed to record MHFA-05 exception for MHFA-COMM-001 plan failure:", exceptionErr);
+          }
+        }
+      }
+
+      return json(200, {
+        status: "notion_write_succeeded",
+        automationCode,
+        correlationId,
+        payloadHash,
+        hasRestrictedData,
+        persisted: true,
+        notionPageId: page.id,
+        notionPageUrl: page.url,
+        note: "Written to MHFA-02 | Learners & Registrations.",
+      });
+    } catch (err) {
+      if (err instanceof NotionNotConfiguredError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: "notion_not_configured",
+          errorSummary: "NOTION_API_KEY is not set",
+          retryable: true,
+        });
+        return json(502, {
+          status: "notion_not_configured",
+          automationCode,
+          correlationId,
+          payloadHash,
+          hasRestrictedData,
+          persisted: false,
+          note: `${featureFlag} is on but NOTION_API_KEY is not set — nothing was written. Fix the misconfiguration rather than treating this as success.`,
+        });
+      }
+      if (err instanceof NotionApiError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: `notion_api_error_${err.status}`,
+          errorSummary: JSON.stringify(err.body),
+          retryable: true,
+        });
+        return json(502, {
+          status: "notion_write_failed",
+          automationCode,
+          correlationId,
+          payloadHash,
+          hasRestrictedData,
+          persisted: false,
+          notionError: { status: err.status, body: err.body },
+          note: "Notion API rejected the write -- see notionError for the real cause (commonly a missing integration capability).",
+        });
+      }
+      throw err;
+    }
+  }
+
+  // MHFA-GRP-01 only: a group/private opportunity needs multiple Notion
+  // lookups/writes (find-or-create Organization, find-or-create Contact,
+  // then create Opportunity) instead of the single createPage above.
+  if (groupOpportunityWrite) {
+    try {
+      const result = await groupOpportunityWrite(correlationId);
+      await logWorkflowExecution({
+        correlationId,
+        automationCode,
+        status: "completed",
+        trigger: formName,
+        inputSnapshot: generalPayload,
+        outputSnapshot: {
+          notionPageId: result.opportunityPageId,
+          notionPageUrl: result.opportunityUrl,
+          organizationPageId: result.organizationPageId,
+          contactPageId: result.contactPageId,
+        },
+      });
+      await sendRegistrationAlert({
+        automationCode,
+        correlationId,
+        notionPageUrl: result.opportunityUrl,
+        generalPayload,
+      });
+      return json(200, {
+        status: "notion_write_succeeded",
+        automationCode,
+        correlationId,
+        payloadHash,
+        hasRestrictedData,
+        persisted: true,
+        notionPageId: result.opportunityPageId,
+        notionPageUrl: result.opportunityUrl,
+        organizationPageId: result.organizationPageId,
+        organizationCreated: result.organizationCreated,
+        contactPageId: result.contactPageId,
+        contactCreated: result.contactCreated,
+        note: "Written to MHFA-03 | Organizations & Group Opportunities (plus Organization and Contact records, created only if they didn't already exist).",
+      });
+    } catch (err) {
+      if (err instanceof NotionNotConfiguredError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: "notion_not_configured",
+          errorSummary: "NOTION_API_KEY is not set",
+          retryable: true,
+        });
+        return json(502, {
+          status: "notion_not_configured",
+          automationCode,
+          correlationId,
+          payloadHash,
+          hasRestrictedData,
+          persisted: false,
+          note: `${featureFlag} is on but NOTION_API_KEY is not set — nothing was written. Fix the misconfiguration rather than treating this as success.`,
+        });
+      }
+      if (err instanceof NotionApiError) {
+        await logWorkflowExecution({
+          correlationId,
+          automationCode,
+          status: "failed_retryable",
+          trigger: formName,
+          inputSnapshot: generalPayload,
+          errorCode: `notion_api_error_${err.status}`,
+          errorSummary: JSON.stringify(err.body),
+          retryable: true,
+        });
+        return json(502, {
+          status: "notion_write_failed",
+          automationCode,
+          correlationId,
+          payloadHash,
+          hasRestrictedData,
+          persisted: false,
+          notionError: { status: err.status, body: err.body },
+          note: "Notion API rejected a write in the Organization/Contact/Opportunity sequence -- see notionError. Any earlier step(s) in the sequence that already succeeded were NOT rolled back (see group-opportunity.ts for why).",
+        });
+      }
+      throw err;
+    }
+  }
+
+  await logWorkflowExecution({
+    correlationId,
+    automationCode,
+    status: "completed_with_warning",
+    trigger: formName,
+    inputSnapshot: generalPayload,
+    outputSnapshot: { note: "validated_not_persisted -- no Notion mapping exists yet for this path" },
+  });
   return json(200, {
-    status: featureEnabled ? "validated_not_persisted" : "dry_run_feature_disabled",
+    status: "validated_not_persisted",
     automationCode,
     correlationId,
     payloadHash,
     hasRestrictedData,
     persisted,
-    note: featureEnabled
-      ? "Validation passed. Supabase persistence is not yet connected — see docs/DECISION_REGISTER.md."
-      : `${featureFlag} is not set. This is a validation-only dry run; no automation was triggered.`,
+    note: "Validation passed. No Notion mapping exists yet for this path — see docs/IMPLEMENTATION_REGISTER.md.",
   });
 };
 

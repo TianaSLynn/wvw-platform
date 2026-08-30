@@ -59,13 +59,45 @@ export interface NotionQueryResult {
   next_cursor: string | null;
 }
 
-/** Query a data source (governance: always search before create). */
+/**
+ * Query a data source (governance: always search before create).
+ *
+ * NOTE: this hits /data_sources/{id}/query, which requires Notion-Version
+ * 2025-09-03 -- confirmed live 2026-08-07 that it 400s ("invalid_request_url")
+ * under the 2022-06-28 version this client otherwise uses everywhere else.
+ * Bumping NOTION_VERSION globally was deliberately avoided here because
+ * page creation under a database may need a different parent shape
+ * (data_source_id vs. database_id) under 2025-09-03, and createPage/updatePage
+ * are the one thing already confirmed working end-to-end in production
+ * (real MHFA-REG-01 registrations) -- not worth risking breaking that to fix
+ * a read path. Use queryDatabaseLegacy below instead until this is resolved
+ * properly.
+ */
 export async function queryDataSource(
   dataSourceId: string,
   filter?: Record<string, unknown>,
   startCursor?: string
 ): Promise<NotionQueryResult> {
   return notionFetch(`/data_sources/${dataSourceId}/query`, {
+    method: "POST",
+    body: JSON.stringify({ filter, start_cursor: startCursor }),
+  }) as Promise<NotionQueryResult>;
+}
+
+/**
+ * Query using the legacy /databases/{id}/query endpoint, which works under
+ * this client's current Notion-Version (2022-06-28) without needing the
+ * 2025-09-03 bump. Use the database page ID here (e.g. from
+ * docs/NOTION_MAPPING.md's "Notion title" / database page column), not the
+ * data source ID. Fine for single-data-source databases, which is every
+ * database this hub queries so far.
+ */
+export async function queryDatabaseLegacy(
+  databaseId: string,
+  filter?: Record<string, unknown>,
+  startCursor?: string
+): Promise<NotionQueryResult> {
+  return notionFetch(`/databases/${databaseId}/query`, {
     method: "POST",
     body: JSON.stringify({ filter, start_cursor: startCursor }),
   }) as Promise<NotionQueryResult>;
@@ -88,6 +120,10 @@ export async function createPage(databaseId: string, properties: Record<string, 
   }) as Promise<NotionPage>;
 }
 
+export async function getPage(pageId: string): Promise<NotionPage> {
+  return notionFetch(`/pages/${pageId}`, { method: "GET" }) as Promise<NotionPage>;
+}
+
 export async function updatePage(pageId: string, properties: Record<string, unknown>): Promise<NotionPage> {
   return notionFetch(`/pages/${pageId}`, {
     method: "PATCH",
@@ -98,4 +134,29 @@ export async function updatePage(pageId: string, properties: Record<string, unkn
 /** Simple email-equals filter helper for the common "search before create" case. */
 export function emailFilter(propertyName: string, email: string) {
   return { property: propertyName, email: { equals: email } };
+}
+
+/** Simple title-equals filter helper for the common "search before create" case. */
+export function titleFilter(propertyName: string, value: string) {
+  return { property: propertyName, title: { equals: value } };
+}
+
+/** Simple relation-contains filter helper for the common "search before create" case. */
+export function relationContainsFilter(propertyName: string, pageId: string) {
+  return { property: propertyName, relation: { contains: pageId } };
+}
+
+/** Simple rich_text-equals filter helper (e.g. Communication Code, Session Code text fields). */
+export function richTextEqualsFilter(propertyName: string, value: string) {
+  return { property: propertyName, rich_text: { equals: value } };
+}
+
+/** Simple select-equals filter helper. */
+export function selectEqualsFilter(propertyName: string, value: string) {
+  return { property: propertyName, select: { equals: value } };
+}
+
+/** Compound AND filter helper. */
+export function andFilter(...filters: Array<Record<string, unknown>>) {
+  return { and: filters };
 }

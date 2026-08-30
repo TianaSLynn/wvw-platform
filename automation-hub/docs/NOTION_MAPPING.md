@@ -42,3 +42,21 @@ Maps from the hub's internal `registrations` + `learners` shape (see `supabase/m
 | `registration.accommodation_requested` | `Accommodation Requested` | checkbox |
 
 Full mapping logic (including the payment/attendance status enum translation) lives in `packages/integration-notion/src/mappers.ts`.
+
+## Field mapping — MHFA-03 Organizations & Group Opportunities
+
+Real live schema confirmed via Notion fetch 2026-08-07. **Self-referential**: an Organization is just a row in this same table, referenced by an Opportunity row's `Organization` relation property (which the schema itself describes as "links an opportunity record to its parent organization record in this table"). Both row "types" share the same title field, `Opportunity Code` — for an Organization row this hub's mapper puts the org's name there instead of a code, since there is no separate "org name" property in the real schema.
+
+Real select options confirmed live:
+- `Delivery Preference`: `Virtual` \| `In-Person` \| `Hybrid` \| `Flexible`
+- `Source`: `Website` \| `Referral` \| `Social Media` \| `Email Campaign` \| `Partner` \| `Cold Outreach` \| `Event`
+- `Stage` (status): `Inquiry` \| `Qualified` \| `Proposal` \| `Contract` \| `Active Client` \| `Closed - Won` \| `Closed - Lost` \| `Inactive`
+- `Contract Status`: `Not Sent` \| `Sent` \| `Signed` \| `Expired`
+- `Deposit Status`: `Not Required` \| `Pending` \| `Received` \| `Waived`
+- `Requested Curriculum`: `ADULT` \| `YOUTH` \| `FIREEMS` \| `VETERAN` \| `HIGHERED` \| `PUBLICSAFETY` \| `RURAL` \| `OLDERADULT`
+
+MHFA-GRP-01 (`FORM-MHFA-002` → MHFA-03) only sets the fields a first-contact inquiry can honestly support — `Opportunity Code`, `Organization` (relation), `Contact` (relation → MHFA-02), `Stage: Inquiry`, `Source: Website`, `Notes`, and (when the submission has them) `Estimated Learners`, `Location`, `Preferred Dates`, `Delivery Preference`. Later-pipeline fields (`Budget`, `Quote Amount`, `Probability`, `Contract Status`, `Deposit Status`, `Session`, `Follow-Up Date`, `Requested Curriculum`) are left unset by this automation — the form doesn't collect them and nothing here should guess at a sales-pipeline value. `Weighted Revenue` is a formula property and is never written to directly.
+
+`Contact` relates to a MHFA-02 page representing the group/private inquiry's point of contact — not a course registrant, so `Payment Status` is deliberately omitted on that page (find-or-create by email; an existing registrant's page is reused as-is, never overwritten, if the same email already exists in MHFA-02).
+
+Full mapping and orchestration logic lives in `packages/integration-notion/src/mappers.ts` (pure) and `packages/integration-notion/src/group-opportunity.ts` (the Notion calls: find-or-create Organization, find-or-create Contact, create Opportunity).
