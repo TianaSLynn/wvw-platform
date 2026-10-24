@@ -112,8 +112,8 @@ export function scoreResponse(
     case "Severity":
     case "Confidence":
     case "Matrix": {
-      const n = parseInt(rawVal, 10);
-      if (isNaN(n) || n < 1 || n > 5) return null;
+      const n = Number(rawVal);
+      if (!Number.isInteger(n) || n < 1 || n > 5) return null;
       return normalizeScore(n, reverseScored);
     }
 
@@ -140,8 +140,8 @@ export function scoreResponse(
 
     case "HiddenTrigger":
     case "Contradiction": {
-      const n = parseInt(rawVal, 10);
-      if (isNaN(n) || n < 1 || n > 5) return null;
+      const n = Number(rawVal);
+      if (!Number.isInteger(n) || n < 1 || n > 5) return null;
       return normalizeScore(n, reverseScored);
     }
 
