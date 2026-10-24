@@ -59,6 +59,16 @@ test("Likert scoring and reverse scoring are correct", () => {
   assert.equal(scoreResponse("4", "Likert", true), 25);
 });
 
+test("invalid scale answers cannot be partially parsed into scores", () => {
+  for (const type of ["Likert", "Frequency", "Severity", "Confidence", "Matrix", "HiddenTrigger", "Contradiction"] as const) {
+    for (const value of ["4garbage", "2.5", "", " ", "0", "6", "Infinity", "NaN"]) {
+      assert.equal(scoreResponse(value, type, false), null, `${type}: ${value}`);
+    }
+    assert.equal(scoreResponse("4", type, false), 75);
+    assert.equal(scoreResponse("4", type, true), 25);
+  }
+});
+
 test("audit scoring aggregates separate anonymous submissions", () => {
   const items: ChecklistItemMeta[] = [
     {
